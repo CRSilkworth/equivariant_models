@@ -1,0 +1,131 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+# C extensions
+*.so
+# Setup file
+setup.sh
+
+# Distribution / packaging
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+venv*/
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*,cover
+.hypothesis/
+htmlcov/*
+
+*.pot
+
+# Django stuff:
+*.log
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+target/
+
+#Ipython Notebook
+.ipynb_checkpoints
+
+#data
+*jpg
+*jpeg
+*png
+*json
+*tfrecords
+*png
+*jpeg
+*pdf
+*txt
+*csv
+*.pickle
+*.html
+*temp.*
+*zip
+*.out
+*tgz
+*gz
+*.tar
+#brown-clustering data
+*.int
+*.strdb
+*.out/
+*.bk
+*.npy
+*.rtf
+
+#Summary files
+*summary_logs/*
+
+#PyCharm files rm -f
+.idea/
+.idea/*
+.DS_Store
+
+#Tensorflow checkpoints
+*.ckpt
+*.ckpt.meta
+*.tfrecords
+
+# parser file
+stanford-postagger-full-2015-01-30/
+
+# individual cfgs folder except test
+**/cfgs/**/*.py
+!**/cfgs/*.py
+!**/cfgs/test/*.py
+
+!README.md
+!requirements.txt
+
+!cac/company_id_helpers/master_dictionary.json
+!cac/company_id_helpers/AD2EL.json
+!cac/company_id_helpers/AD2CL.json
+
+!**/unitTest/unittest_data/**/*.json
+!**/unitTest/unit[Tt]est_data/*.json
+!**/unitTest/unittest_data/*.csv
+!**/unitTest/unittest_data/*.tfrecords
+!**/unitTest/unittest_data/*.txt
+!**/unitTest/unittest_data/eh_example/*
+!**/unitTest/unittest_data/**/*json
+!cac/embedding_handlers/unitTest/unitTest_data/raven_test_phrase_vals/*
+!cac/embedding_handlers/unitTest/unitTest_data/falcon_test_phrase_vals/*
+
+!/cac/features/unitTest/*.txt
+!/cac/nat_language_helpers/stopwords.txt
