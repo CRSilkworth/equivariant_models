@@ -6,89 +6,55 @@ import urllib2
 import cv2
 import random
 import socket
+import httplib
+import glob
+import pprint
 
 
 class ImageGenerator:
     """
     Image generator to be used in a training/testing pipeline. Downloads images or reads them from disk.
     """
-    def __init__(self, url_file_name, img_dir='./images/', allowed_extensions=['jpg'], mean_brg=np.array([104., 117., 124.], dtype=np.float32), size=(227, 227), label_file_name='all_labels.txt', lines_to_skip_file_name=None):
-
-        self.url_file_name = url_file_name
+    def __init__(self, img_dir='./images/', img_label_file_name=None, allowed_extensions=['JPEG'], mean_brg=np.array([104., 117., 124.], dtype=np.float32), size=(227, 227), label_file_name='all_labels.txt'):
+        self.img_label_file_name = img_label_file_name
         self.img_dir = img_dir
         self.allowed_extensions = allowed_extensions
         self.mean_brg = mean_brg
         self.size = size
-        self.reverse_url_hash = {}
-
-        # If a file of lines in the url file to skip to exist then load it up.
-        # Used to avoid cycling through all the broken images.
-        self.lines_to_skip_file_name = lines_to_skip_file_name
-        self.lines_to_skip = set()
-        if lines_to_skip_file_name is not None and os.path.isfile(self.lines_to_skip_file_name):
-            with open(self.lines_to_skip_file_name) as lines_to_skip_file:
-                for line in lines_to_skip_file:
-                    self.lines_to_skip.add(int(line))
-
+        self.img_data = []
         # Create the dictionary which maps the coded label to the label number
         # and the english label.
-        label_map = {}
+        self.label_map = {}
         with open(label_file_name, 'r') as label_file:
             for line in label_file:
                 coded_label, label_num, label_english = line.split()
-                label_map[coded_label] = label_num, label_english
 
-        with open(self.url_file_name) as url_file:
-            self.urls = []
-            for line_num, line in enumerate(url_file):
-                if line_num in self.lines_to_skip:
-                    continue
+                self.label_map[int(label_num)] = label_english
 
-                # Get the label, the image url and the image type from each line
-                # of the url file
-                coded_label = line.split()[0].split('_')[0]
-                url = line.split()[1]
-                ext = url.split('.')[-1]
+        # Pull out the labels from the label file.
+        if img_label_file_name is not None:
+            with open(img_label_file_name, 'r') as img_label_file:
+                img_labels = [int(l_num) for l_num in img_label_file]
 
-                # Only take allowed types
-                if ext not in self.allowed_extensions:
-                    continue
+        # Gather all the image paths. It will be assumed their sorted names
+        # correspond to the same order as the labels in img_label_file
+        img_paths = []
+        for ext in allowed_extensions:
+            img_paths.extend(glob.glob(os.path.join(img_dir, '*.' + ext)))
+        img_paths.sort()
 
-                if coded_label not in label_map:
-                    continue
-
-                label_num, label_english = label_map[coded_label]
-
-                self.urls.append((line_num, url, label_num, label_english))
+        # Create the full list of image information.
+        for line_num, img_path in enumerate(img_paths):
+            label_num = None
+            label_english = None
+            if img_label_file_name is not None:
+                label_num = img_labels[line_num]
+                label_english = self.label_map[label_num]
+            self.img_data.append((img_path, label_num, label_english))
 
     def __iter__(self):
-        lines_to_skip_file = None
-        if self.lines_to_skip_file_name is not None:
-            lines_to_skip_file = open(self.lines_to_skip_file_name, 'a')
-
-        for line_num, url, label_num, label_english in self.urls:
-            if line_num in self.lines_to_skip:
-                continue
-
-            # Create a hash for the url to be used as the file name. Keep
-            # information about the which hash is which url.
-            hash_m = hashlib.md5()
-            hash_m.update(url)
-            url_hash = hash_m.hexdigest()
-            self.reverse_url_hash[url_hash] = url
-            ext = url.split('.')[-1]
-
-            # Download the image if it hasn't already been downloaded.
-            img_file_name = self.img_dir + url_hash + '.' + ext
-            if not self._obtain_image(url, img_file_name, line_num, lines_to_skip_file):
-                continue
-
-            img = cv2.imread(img_file_name)
-            if img is None:
-                print url, "failed to read. skipping..."
-                self._add_line_to_skip(line_num, lines_to_skip_file)
-                continue
-
+        for img_path, label_num, label_english in self.img_data:
+            img = cv2.imread(img_path)
             img = self._alter_img(img)
 
             yield img, label_num, label_english
@@ -111,7 +77,7 @@ class ImageGenerator:
             # doesn't exist or it you get a timeout
             try:
                 img_file = urllib2.urlopen(url, timeout=5)
-            except urllib2.HTTPError:
+            except (urllib2.HTTPError, httplib.BadStatusLine):
                 print url, "got 404, skipping..."
                 self._add_line_to_skip(line_num, lines_to_skip_file)
                 return False
@@ -127,9 +93,4 @@ class ImageGenerator:
         return True
 
     def shuffle(self):
-        random.shuffle(self.urls)
-
-    def _add_line_to_skip(self, line_num, lines_to_skip_file):
-        if self.lines_to_skip_file_name is None:
-            return
-        lines_to_skip_file.write(str(line_num) + '\n')
+        random.shuffle(self.img_data)
