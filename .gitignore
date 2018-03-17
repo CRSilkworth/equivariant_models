@@ -65,6 +65,7 @@ target/
 # model stuff
 *tfevents*
 *ckpt*
+*pb
 
 #data
 *jpg
