@@ -62,6 +62,10 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 
+# model stuff
+*tfevents*
+*ckpt*
+
 #data
 *jpg
 *jpeg

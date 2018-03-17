@@ -41,11 +41,13 @@ setup(
                                     'unitTest.*', '*.unitTest.*', 'projects', 'projects.*']),
     install_requires=[
         'numpy==1.13.0',
-        'tensorflow==1.1.0',
+        'tensorflow>=1.4.0',
         'scipy>= 0.19.0',
         'scikit-learn>=0.19.1',
         'scikit-optimize==0.5',
-        'matplotlib'
+        'opencv-python',
+        'matplotlib',
+        'Pillow>=5.0.0'
     ],
     cmdclass={
         'install': CustomDependencyInstallCommand
