@@ -110,6 +110,9 @@ target/
 # parser file
 stanford-postagger-full-2015-01-30/
 
+# test
+**/test/**
+
 # individual cfgs folder except test
 **/cfgs/**/*.py
 !**/cfgs/*.py
