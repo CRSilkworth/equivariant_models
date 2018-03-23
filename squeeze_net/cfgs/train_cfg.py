@@ -13,12 +13,12 @@ num_classes = 1000
 target_image_size = [224, 224]
 
 keep_last_n_checkpoints = 10
-summary_interval = 10
-checkpoint_interval = 10
-validation_interval = 10
+summary_interval = 100
+checkpoint_interval = 100
+validation_interval = 100
 
-batch_size = 64
-max_train_steps = 3001
+batch_size = 128
+max_train_steps = 30001
 shuffle_buffer = 1000
 learning_rate = 0.001
 weight_decay = 0.0
