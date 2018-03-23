@@ -17,9 +17,11 @@ summary_interval = 100
 checkpoint_interval = 100
 validation_interval = 100
 
+
 batch_size = 128
+
 max_train_steps = 30001
 shuffle_buffer = 1000
-learning_rate = 0.001
+learning_rate = 0.01
 weight_decay = 0.0
 batch_norm_decay = 0.9
