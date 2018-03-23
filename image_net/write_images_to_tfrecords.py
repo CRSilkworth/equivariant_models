@@ -58,8 +58,6 @@ from __future__ import print_function
 
 from datetime import datetime
 import random
-import glob
-import pprint
 import os
 import sys
 import imp
