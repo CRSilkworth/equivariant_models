@@ -246,6 +246,7 @@ fc8 = tf.nn.xw_plus_b(fc7, fc8W, fc8b)
 #prob
 #softmax(name='prob'))
 prob = tf.nn.softmax(fc8)
+prob = tf.squeeze(prob)
 
 init = tf.initialize_all_variables()
 sess = tf.Session()
@@ -261,9 +262,8 @@ for image_num, (img_path, label_num, label_english) in enumerate(image_paths_and
     # im1 = im1 - mean(im1)
     # im1[:, :, 0], im1[:, :, 2] = im1[:, :, 2], im1[:, :, 0]
 
-    probs = sess.run(prob, feed_dict = {image_file_name_placeholder:img_path})
+    probs = sess.run(prob, feed_dict={image_file_name_placeholder: img_path})
 
-    probs = probs[0, 0:]
     sorted_inds = [i[0] for i in sorted(enumerate(-probs), key=lambda x:x[1])]
 
     sorted_english = [lm.s_to_english[ind] for ind in sorted_inds[:5]]
