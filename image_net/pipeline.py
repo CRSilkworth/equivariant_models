@@ -13,21 +13,35 @@ class Pipeline(object):
 
         training_dataset = self._create_dataset(
             batch_size=args.batch_size * args.num_gpus,
+            ##################
             pad_batch=False,
+            # pad_batch=True,
+            ##################
             repeat=None,
             num_input_threads=args.num_input_threads,
+            ####################
             shuffle=True,
             shuffle_buffer=args.shuffle_buffer,
+            # shuffle=False,
+            # shuffle_buffer=None,
+            ####################
             seed=args.seed,
             files=args.train_tfrecord_filepaths,
-            distort_image=True,
+            ##################
+            # NOTE: BEEN ALTERED
+            # distort_image=True,
+            distort_image=False,
+            ###################
             target_image_size=target_image_size
         )
 
         validation_dataset = self._create_dataset(
             batch_size=args.batch_size * args.num_gpus,
             pad_batch=True,
+            #################
             repeat=1,
+            # repeat=None,
+            ################
             num_input_threads=args.num_input_threads,
             shuffle=False,
             shuffle_buffer=None,
