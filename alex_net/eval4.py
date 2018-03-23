@@ -9,8 +9,6 @@ import urllib2
 import tensorflow.contrib.slim.nets
 import image_net.labels.label_maps as lm
 import image_net.image_generator as ig
-import alex_net.kratzert as kr
-import alex_net.pjaehrling as pj
 import glob
 import pprint
 import os
@@ -98,8 +96,107 @@ def image_paths_and_labels(img_dir, img_label_file_name):
             label_num = lm.l_to_s[img_labels[line_num]]
             label_english = lm.s_to_english[label_num]
         yield img_path, label_num, label_english
+def load_initial_weights(session, weights_path):
+    """
+    As the weights from http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/ come
+    as a dict of lists (e.g. weights['conv1'] is a list) and not as dict of
+    dicts (e.g. weights['conv1'] is a dict with keys 'weights' & 'biases') we
+    need a special load function
+    """
 
+    # Load the weights into memory
+    weights_dict = np.load(weights_path, encoding='bytes').item()
 
+    # Loop over all layer names stored in the weights dict
+    for op_name in weights_dict:
+        print op_name
+        with tf.variable_scope(op_name, reuse=True):
+            for data in weights_dict[op_name]:
+                if len(data.shape) == 1:
+                    var = tf.get_variable('biases', trainable=False)
+                    session.run(var.assign(data))
+                else:
+                    var = tf.get_variable('weights', trainable=False)
+                    session.run(var.assign(data))
+
+ALEX_PATCH_DEPTH_1, ALEX_PATCH_DEPTH_2, ALEX_PATCH_DEPTH_3, ALEX_PATCH_DEPTH_4 = 96, 256, 384, 256
+ALEX_PATCH_SIZE_1, ALEX_PATCH_SIZE_2, ALEX_PATCH_SIZE_3, ALEX_PATCH_SIZE_4 = 11, 5, 3, 3
+ALEX_NUM_HIDDEN_1, ALEX_NUM_HIDDEN_2 = 4096, 4096
+def define_variables(patch_size1 = ALEX_PATCH_SIZE_1, patch_size2 = ALEX_PATCH_SIZE_2,
+                      patch_size3 = ALEX_PATCH_SIZE_3, patch_size4 = ALEX_PATCH_SIZE_4,
+                      patch_depth1 = ALEX_PATCH_DEPTH_1, patch_depth2 = ALEX_PATCH_DEPTH_2,
+                      patch_depth3 = ALEX_PATCH_DEPTH_3, patch_depth4 = ALEX_PATCH_DEPTH_4,
+                      num_hidden1 = ALEX_NUM_HIDDEN_1, num_hidden2 = ALEX_NUM_HIDDEN_2,
+                      image_width = 224, image_height = 224, image_depth = 3, num_labels = 1000):
+
+    w1 = tf.Variable(tf.truncated_normal([patch_size1, patch_size1, image_depth, patch_depth1], stddev=0.1))
+    b1 = tf.Variable(tf.zeros([patch_depth1]))
+
+    w2 = tf.Variable(tf.truncated_normal([patch_size2, patch_size2, patch_depth1, patch_depth2], stddev=0.1))
+    b2 = tf.Variable(tf.constant(1.0, shape=[patch_depth2]))
+
+    w3 = tf.Variable(tf.truncated_normal([patch_size3, patch_size3, patch_depth2, patch_depth3], stddev=0.1))
+    b3 = tf.Variable(tf.zeros([patch_depth3]))
+
+    w4 = tf.Variable(tf.truncated_normal([patch_size4, patch_size4, patch_depth3, patch_depth3], stddev=0.1))
+    b4 = tf.Variable(tf.constant(1.0, shape=[patch_depth3]))
+
+    w5 = tf.Variable(tf.truncated_normal([patch_size4, patch_size4, patch_depth3, patch_depth3], stddev=0.1))
+    b5 = tf.Variable(tf.zeros([patch_depth3]))
+
+    pool_reductions = 3
+    conv_reductions = 2
+    no_reductions = pool_reductions + conv_reductions
+    w6 = tf.Variable(tf.truncated_normal([(image_width // 2**no_reductions)*(image_height // 2**no_reductions)*patch_depth3, num_hidden1], stddev=0.1))
+    b6 = tf.Variable(tf.constant(1.0, shape = [num_hidden1]))
+
+    w7 = tf.Variable(tf.truncated_normal([num_hidden1, num_hidden2], stddev=0.1))
+    b7 = tf.Variable(tf.constant(1.0, shape = [num_hidden2]))
+
+    w8 = tf.Variable(tf.truncated_normal([num_hidden2, num_labels], stddev=0.1))
+    b8 = tf.Variable(tf.constant(1.0, shape = [num_labels]))
+
+    variables = {
+                 'w1': w1, 'w2': w2, 'w3': w3, 'w4': w4, 'w5': w5, 'w6': w6, 'w7': w7, 'w8': w8,
+                 'b1': b1, 'b2': b2, 'b3': b3, 'b4': b4, 'b5': b5, 'b6': b6, 'b7': b7, 'b8': b8
+                }
+    return variables
+def flatten_tf_array(array):
+    shape = array.get_shape().as_list()
+    return tf.reshape(array, [shape[0], shape[1] * shape[2] * shape[3]])
+def model_alexnet(data, variables, keep_prob):
+    layer1_conv = tf.nn.conv2d(data, variables['w1'], [1, 4, 4, 1], padding='SAME')
+    layer1_relu = tf.nn.relu(layer1_conv + variables['b1'])
+    layer1_pool = tf.nn.max_pool(layer1_relu, [1, 3, 3, 1], [1, 2, 2, 1], padding='SAME')
+    layer1_norm = tf.nn.local_response_normalization(layer1_pool)
+
+    layer2_conv = tf.nn.conv2d(layer1_norm, variables['w2'], [1, 1, 1, 1], padding='SAME')
+    layer2_relu = tf.nn.relu(layer2_conv + variables['b2'])
+    layer2_pool = tf.nn.max_pool(layer2_relu, [1, 3, 3, 1], [1, 2, 2, 1], padding='SAME')
+    layer2_norm = tf.nn.local_response_normalization(layer2_pool)
+
+    layer3_conv = tf.nn.conv2d(layer2_norm, variables['w3'], [1, 1, 1, 1], padding='SAME')
+    layer3_relu = tf.nn.relu(layer3_conv + variables['b3'])
+
+    layer4_conv = tf.nn.conv2d(layer3_relu, variables['w4'], [1, 1, 1, 1], padding='SAME')
+    layer4_relu = tf.nn.relu(layer4_conv + variables['b4'])
+
+    layer5_conv = tf.nn.conv2d(layer4_relu, variables['w5'], [1, 1, 1, 1], padding='SAME')
+    layer5_relu = tf.nn.relu(layer5_conv + variables['b5'])
+    layer5_pool = tf.nn.max_pool(layer5_relu, [1, 3, 3, 1], [1, 2, 2, 1], padding='SAME')
+    layer5_norm = tf.nn.local_response_normalization(layer5_pool)
+
+    flat_layer = flatten_tf_array(layer5_norm)
+    layer6_fccd = tf.matmul(flat_layer, variables['w6']) + variables['b6']
+    layer6_tanh = tf.tanh(layer6_fccd)
+    layer6_drop = tf.nn.dropout(layer6_tanh, keep_prob)
+
+    layer7_fccd = tf.matmul(layer6_drop, variables['w7']) + variables['b7']
+    layer7_tanh = tf.tanh(layer7_fccd)
+    layer7_drop = tf.nn.dropout(layer7_tanh, keep_prob)
+
+    logits = tf.matmul(layer7_drop, variables['w8']) + variables['b8']
+    return logits
 def main(cfg):
     # We need default size of image for a particular network.
     # The network was trained on images of that size -- so we
@@ -141,11 +238,13 @@ def main(cfg):
         keep_prob = tf.placeholder(tf.float32)
 
         # model = kr.AlexNet(processed_images, keep_prob, 1000, [], weights_path=cfg.model_weights_path)
-        model = pj.AlexNet(processed_image)
+        # model = pj.AlexNet(processed_image)
 
         # In order to get probabilities we apply softmax on the output.
         # probabilities = tf.nn.softmax(model.fc8)
-        probabilities = tf.nn.softmax(model.get_final_op())
+        variables = define_variables()
+        logits = model_alexnet(processed_image, variables, keep_prob)
+        probabilities = tf.nn.softmax(logits)
 
         # Create a function that reads the network weights
         # from the checkpoint file that you downloaded.
@@ -158,7 +257,8 @@ def main(cfg):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
             # Load weights
-            model.load_initial_weights(sess)
+            load_initial_weights(sess, cfg.model_weights_path)
+            exit()
 
             img_label_iter = image_paths_and_labels(
                 cfg.img_dir,
@@ -180,7 +280,7 @@ def main(cfg):
                 probs = probs[0]
                 pred_labels = np.flip(np.argsort(probs), axis=0)[:5]
 
-                sorted_english = [lm.s_to_english[l] for l in pred_labels]
+                # sorted_english = [lm.s_to_english[l] for l in pred_labels]
 
                 # print '----------------------'
                 # print image_path, label_english
