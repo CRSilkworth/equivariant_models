@@ -1,214 +1,295 @@
-from matplotlib import pyplot as plt
-
 import numpy as np
 import os
 import tensorflow as tf
-import urllib2
-
-# from datasets import imagenet
-import tensorflow.contrib.slim.nets
-import image_net.labels.label_maps as lm
-import image_net.image_generator as ig
-import alex_net.kratzert as kr
+import image_net.data_augmentation as da
 import alex_net.pjaehrling as pj
-import image_net.pipeline as inputs
-import glob
+import alex_net.kratzert as kr
+import alex_net.guerzhoy as gu
 import pprint
-import os
 import sys
 import imp
+import time
+from tensorflow.python.client import timeline
 
+def read_and_decode(filename_queue, batch_size, image_size=(256, 265), to_run=None):
+    reader = tf.TFRecordReader()
+    _, serialized_example = reader.read(filename_queue)
 
-def preprocess_image(images, mean_rgb, rgb_eigenvectors, rgb_eigenvalues, crop_image_size=(224, 224), is_training):
-    batch_size = tf.shape(images)[0]
-    # Subtract the imagenet mean (mean over all imagenet images)
-    imagenet_mean = tf.reshape(mean_rgb, [1, 1, 3])
-    imagenet_mean = tf.expand_dims(imagenet_mean, 0)
-    imagenet_mean = tf.tile(imagenet_mean, multiples=[batch_size, 1, 1, 1])
-    images_standardized = tf.subtract(images, imagenet_mean)
-
-    if is_training:
-        images_standardized = rgb_distortion(images_standardized, rgb_eigenvectors, rgb_eigenvalue)
-        images_standardized = five_crops(images_standardized, crop_image_size)
-        images_standardized = horizontal_flip(images_standardized)
-    else:
-        images_standardized = tf.image.resize_image_with_crop_or_pad(images, crop_image_size[0], crop_image_size[1])
-
-    # e.g. in my alexnet implementation the images are feed to the net in BGR format, NOT RGB
-    channels = tf.unstack(images_standardized, axis=-1)
-    images_standardized = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
-
-    images_standardized = tf.expand_dims(images_standardized, 0)
-    return img_standardized
-
-
-def rgb_distortion(images, rgb_eigenvectors, rgb_eigenvalues):
-    height = images.shape[1]
-    width = images.shape[2]
-
-    rgb_distortion = []
-    for color_num in xrange(3):
-        # Pull out the color eigenvector and tile by the number of images in the
-        # batch.
-        eigenvector = rgb_eigenvectors[color_num]
-        eigenvector = tf.expand_dims(eigenvector, 0)
-        eigenvector = tf.tile(eigenvector, multiples=[batch_size, 1])
-
-        # Pull out the color eigenvector and tile by the number of images in the
-        # batch and 3 times to match the eigenvector dims
-        eigenvalue = rgb_eigenvalue[color_num]
-        eigenvalue = tf.expand_dims(tf.expand_dims(eigenvalue, 0), 0)
-        eigenvalue = tf.tile(eigenvalue, multiples=[batch_size, 3])
-
-        # Get the random number drawn from a normal and tile it to match the
-        # shape of eigenvector tensor
-        random = tf.random_normal([batch_size], stddev=0.1)
-        random = tf.expand_dims(random, -1)
-        random = tf.tile(random, multiples=[1, 3])
-
-        # Multiply them together and sum along the eigenvector's original dim.
-        rgb_distortion.append(
-            tf.reduce_sum(random * eigenvalue * eigenvector, axis=-1)
-        )
-    # Stack them into a single tensor, and tile to match the images dims.
-    rgb_distortion = tf.stack(rgb_distortion, axis=-1)
-    rgb_distortion = tf.expand_dims(tf.expand_dims(rgb_distortion, 1))
-    rgb_distortion = tf.tile(rgb_distortion, multiples=[1, height, width, 1])
-
-    # Add the distortion and return
-    return images + rgb_distortion
-
-
-def five_crops(images, crop_image_size):
-    # Four corner crops
-    crop_1 = images[:, :crop_image_size[0], :crop_image_size[1], :]
-    crop_2 = images[:, -crop_image_size[0]:, :crop_image_size[1], :]
-    crop_3 = images[:, :crop_image_size[0], :-crop_image_size[1], :]
-    crop_4 = images[:, -crop_image_size[0]:, :-crop_image_size[1], :]
-
-    # Center crop
-    crop_5 = tf.image.resize_image_with_crop_or_pad(images, crop_image_size[0], crop_image_size[1])
-
-    # Stack them along the batch dim and return.
-    concats = tf.stack(
-        [crop_1, crop_2, crop_3, crop_4, crop_5],
-        axis=0
+    features = tf.parse_single_example(
+        serialized_example,
+        # Defaults are not specified since both keys are required.
+        features={
+            'image/class/text': tf.FixedLenFeature([], tf.string),
+            'image/filename': tf.FixedLenFeature([], tf.string),
+            'image/class/syn_code': tf.FixedLenFeature([], tf.string),
+            'image/encoded': tf.FixedLenFeature([], tf.string),
+            'image/class/label': tf.FixedLenFeature([], tf.int64),
+        }
     )
-    return concats
+    to_run['filename'] = features['image/filename']
+    to_run['syn_code'] = features['image/class/syn_code']
+    to_run['text'] = features['image/class/text']
+
+    image = tf.image.decode_jpeg(features['image/encoded'], channels=3)
+    image = tf.to_float(image)
+
+    label = tf.cast(features['image/class/label'], tf.int32)
+
+    return image, label
 
 
-def horizontal_flip(images):
-    # Flip along the width axis, stack with the original along the batch dim
-    # and return.
-    flipped = tf.reverse(images, axis=2)
-    return tf.stack([images, flipped], axis=0)
+def inputs(file_names, batch_size=128, image_size=(256, 256), num_epochs=None, crop_image_size=None, flip_axis=2, rgb_mean=[121.65, 116.67, 102.82], rgb_eigenvectors=None, rgb_eigenvalues=None, rgb_stddev=0.1, bgr=False, is_training=True, to_run=None):
+    """
+    Read input data num_epochs times.
+
+    Args:
+    data_dir: The directory with the tfrecord files.
+    batch_size: Number of examples per returned batch.
+    num_epochs: Number of times to read the input data, or None to
+       train forever.
+    Returns:
+    A tuple (images, labels), where:
+    * images is a float tensor with shape [batch_size, mnist.IMAGE_PIXELS]
+      in the range [-0.5, 0.5].
+    * labels is an int32 tensor with shape [batch_size] with the true label,
+      a number in the range [0, mnist.NUM_CLASSES).
+    Note that an tf.train.QueueRunner is added to the graph, which
+    must be run using e.g. tf.train.start_queue_runners().
+    """
+    with tf.name_scope('input'):
+        with tf.device('/cpu:0'):
+            filename_queue = tf.train.string_input_producer(
+                file_names, num_epochs=num_epochs)
+
+            image, label = read_and_decode(filename_queue, batch_size, image_size, to_run)
+
+            mean = tf.reshape(rgb_mean, [1, 1, 3])
+            image = tf.subtract(image, mean)
+
+            if is_training:
+                image = crop_flip_distort(
+                    image,
+                    crop_image_size=crop_image_size,
+                    flip_axis=flip_axis,
+                    rgb_eigenvectors=rgb_eigenvectors,
+                    rgb_eigenvalues=rgb_eigenvalues,
+                    rgb_stddev=rgb_stddev,
+                    to_run=to_run
+                )
+            else:
+                image = crop_to_center(image, image_size, crop_image_size)
+                image.set_shape(list(crop_image_size) + [3])
+
+            if bgr:
+                # Switch from rgb to bgr
+                channels = tf.unstack(image, axis=-1)
+                image = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
+
+            images, labels = tf.train.shuffle_batch(
+                [image, label],
+                batch_size=batch_size,
+                num_threads=3,
+                capacity=1000 + 3 * batch_size,
+                min_after_dequeue=1000
+            )
+
+            return images, labels
+
+
+def crop_to_center(image, image_size, crop_image_size):
+    crop_h = (image_size[0] - crop_image_size[0])/2
+    crop_w = (image_size[1] - crop_image_size[1])/2
+
+    image = image[crop_h: crop_h + crop_image_size[0], crop_w: crop_w + crop_image_size[1], :]
+    return image
+
+
+def crop_flip_distort(image, crop_image_size=None, flip_axis=2, rgb_eigenvectors=None, rgb_eigenvalues=None, rgb_stddev=0.1, to_run=None):
+    with tf.name_scope('data_augmentation'):
+        if crop_image_size is not None:
+            image = tf.random_crop(image, [crop_image_size[0], crop_image_size[1], 3])
+        if flip_axis is not None:
+            image = tf.image.random_flip_left_right(image)
+        if rgb_eigenvectors is not None:
+            image = da.rgb_distortion(image, rgb_eigenvectors, rgb_eigenvalues, stddev=rgb_stddev, to_run=to_run)
+
+    return image
+
+
+def loss(logits, labels, num_classes=1000, weight_decay=0.0, to_run=None):
+    with tf.name_scope('loss'):
+        weights = [w for w in tf.all_variables() if not w.name.find('biases') > -1 and not w.name.find('Momentum') > -1]
+
+        l2s = tf.stack([tf.nn.l2_loss(w) for w in weights])
+        weight_norm = weight_decay * tf.reduce_sum(l2s)
+
+        # oh_labels = tf.one_hot(labels, num_classes)
+        cross_entropy = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            logits=logits,
+            # labels=oh_labels
+            labels=labels
+        )
+        cross_entropy = tf.reduce_mean(cross_entropy)
+        loss_val = cross_entropy + weight_norm
+        to_run['weight_norm'] = weight_norm
+        to_run['cross_entropy'] = cross_entropy
+    return loss_val
+
+
+def top_k_accuracy(logits, labels, batch_size, k=1):
+    preds = tf.nn.softmax(logits)
+    correct = tf.nn.in_top_k(predictions=preds, targets=labels, k=k)
+    accuracy = tf.reduce_sum(tf.to_float(correct))/batch_size
+    return accuracy
+
+
+def optimize(loss, learning_rate=0.01, momentum=0.9, to_run=None):
+    with tf.name_scope('optimize'):
+        optimizer = tf.train.MomentumOptimizer(
+            learning_rate=learning_rate,
+            momentum=momentum
+        )
+
+        return optimizer.minimize(loss=loss)
 
 
 def main(cfg):
-    # We need default size of image for a particular network.
-    # The network was trained on images of that size -- so we
-    # resize input image later in the code.
-
     with tf.Graph().as_default():
+        to_run = {}
 
-        pipeline = inputs.Pipeline(cfg, sess)
-        examples, labels = pipeline.data
-        images = examples['image']
-
-        processed_image = preprocess_image(
-            images,
-            cfg.mean_rgb,
-            cfg.rgb_eigenvectors,
-            cfg.rgb_eigenvalues,
-            cfg.crop_image_size
-            is_training=True
+        # Input images and labels.
+        images, labels = inputs(
+            file_names=cfg.train_tfrecord_filepaths,
+            batch_size=cfg.batch_size,
+            num_epochs=cfg.num_epochs,
+            crop_image_size=cfg.crop_image_size,
+            flip_axis=cfg.flip_axis,
+            rgb_mean=cfg.rgb_mean,
+            rgb_eigenvectors=cfg.rgb_eigenvectors,
+            rgb_eigenvalues=cfg.rgb_eigenvalues,
+            rgb_stddev=cfg.rgb_stddev,
+            bgr=cfg.bgr,
+            is_training=cfg.is_training,
+            to_run=to_run
         )
 
-        keep_prob = tf.placeholder(tf.float32)
+        if cfg.use_pretrained_weights:
+            skip_layer = []
+            retrain_layer = []
+        else:
+            skip_layer = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
+            retrain_layer = ['conv1', 'conv2', 'conv3', 'conv4', 'conv5', 'fc6', 'fc7', 'fc8']
 
-        # model = kr.AlexNet(processed_images, keep_prob, 1000, [], weights_path=cfg.model_weights_path)
-        model = pj.AlexNet(processed_image)
-
-        # In order to get probabilities we apply softmax on the output.
-        # probabilities = tf.nn.softmax(model.fc8)
-        probabilities = tf.nn.softmax(model.get_final_op())
-
-        # Create a function that reads the network weights
-        # from the checkpoint file that you downloaded.
-        # We will run it in session later.
-        # init_fn = slim.assign_from_checkpoint_fn(
-        #     cfg.model_weights_path,
-        #     slim.get_model_variables('vgg_16')
-        # )
-
-        with tf.Session() as sess:
-            sess.run(tf.global_variables_initializer())
-            # Load weights
-            model.load_initial_weights(sess)
-
-            img_label_iter = image_paths_and_labels(
-                cfg.img_dir,
-                cfg.img_label_file_name
+        if cfg.model_type == 'pj':
+            model = pj.AlexNet(
+                images,
+                num_classes=cfg.num_classes,
+                keep_prob=cfg.keep_prob,
+                retrain_layer=retrain_layer, weights_path=cfg.pretrained_weights_file
             )
-            right = 0
-            wrong = 0
-            for image_num, img_label in enumerate(img_label_iter):
+            logits = model.get_final_op()
+        elif cfg.model_type == 'kr':
+            model = kr.AlexNet(
+                images,
+                keep_prob=cfg.keep_prob,
+                num_classes=cfg.num_classes,
+                skip_layer=skip_layer,
+                weights_path=cfg.pretrained_weights_file
+            )
+            logits = model.fc8
+        elif cfg.model_type == 'gu':
+            model = gu.AlexNet(
+                images,
+                keep_prob=cfg.keep_prob,
+                num_classes=cfg.num_classes,
+                retrain_layer=skip_layer,
+                weights_path=cfg.pretrained_weights_file
+            )
+            logits = model.get_logits()
+        to_run['loss'] = loss(
+            logits=logits,
+            labels=labels,
+            num_classes=cfg.num_classes,
+            weight_decay=cfg.weight_decay,
+            to_run=to_run
+        )
+        if not cfg.use_pretrained_weights:
+            to_run['optimize'] = optimize(
+                loss=to_run['loss'],
+                learning_rate=cfg.learning_rate,
+                momentum=cfg.momentum,
+                to_run=to_run
 
-                image_path, label_num, label_english = img_label
+            )
+        to_run['accuracy'] = top_k_accuracy(
+            logits=logits,
+            labels=labels,
+            batch_size=cfg.batch_size,
+            k=5
+        )
+        pprint.pprint([w.name for w in tf.trainable_variables()])
 
-                # We want to get predictions, image as numpy matrix
-                # and resized and cropped piece that is actually
-                # being fed to the network.
-                network_input, probs = sess.run(
-                    [processed_image, probabilities],
-                    feed_dict={image_file_name_placeholder: image_path, keep_prob: 1.}
-                )
-                probs = probs[0]
-                pred_labels = np.flip(np.argsort(probs), axis=0)[:5]
+        # The op for initializing the variables.
+        init_op = tf.group(
+            tf.global_variables_initializer(),
+            tf.local_variables_initializer()
+        )
+        gpu_config = tf.GPUOptions(
+            per_process_gpu_memory_fraction=cfg.gpu_memory_frac
+        )
+        config = tf.ConfigProto(
+            allow_soft_placement=cfg.allow_soft_placement,
+            log_device_placement=cfg.log_device_placement,
+            gpu_options=gpu_config
+        )
+        with tf.Session(config=config) as sess:
+            sess.run(init_op)
 
-                sorted_english = [lm.s_to_english[l] for l in pred_labels]
+            if cfg.use_pretrained_weights and cfg.model_type in ('pj', 'kr', 'gu'):
+                model.load_initial_weights(sess)
+            coord = tf.train.Coordinator()
+            threads = tf.train.start_queue_runners(sess=sess, coord=coord)
+            options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            try:
+                begin_time = time.time()
+                step = 0
 
-                # print '----------------------'
-                # print image_path, label_english
-                # print sorted_english
-                # print '----------------------'
+                while not coord.should_stop():
+                    start_time = time.time()
 
-                if label_num in pred_labels:
-                    right += 1
-                else:
-                    wrong += 1
+                    results = sess.run(
+                        to_run,
+                        options=options,
+                        run_metadata=run_metadata
+                        )
 
-                if image_num % 100 == 0:
-                    print float(right)/(right + wrong)
-        # Show the downloaded image
-        # plt.figure()
-        # plt.imshow(np_image.astype(np.uint8))
-        # plt.suptitle("Downloaded image", fontsize=14, fontweight='bold')
-        # plt.axis('off')
-        # plt.show()
+                    duration = time.time() - start_time
+                    total_time = time.time() - begin_time
 
-        # Show the image that is actually being fed to the network
-        # The image was resized while preserving aspect ratio and then
-        # cropped. After that, the mean pixel value was subtracted from
-        # each pixel of that crop. We normalize the image to be between [-1, 1]
-        # to show the image.
-        # plt.imshow( network_input / (network_input.max() - network_input.min()) )
-        # plt.suptitle("Resized, Cropped and Mean-Centered input to network",
-        #              fontsize=14, fontweight='bold')
-        # plt.axis('off')
-        # plt.show()
+                    if step % cfg.print_every == 0 and step > 0:
+                        print('------------------------------------------')
+                        print('Total_time: %.3f') % (total_time,)
+                        print('Step %d: (%.3f sec)' % (step, duration))
+                        print('Time per step: %.3f' % (total_time/step,))
+                        print ('Loss: %.3f' % results['loss'])
+                        pprint.pprint(results)
 
-        # names = imagenet.create_readable_names_for_imagenet_labels()
-        # for i in range(5):
-        #     index = sorted_inds[i]
-            # Now we print the top-5 predictions that the network gives us with
-            # corresponding probabilities. Pay attention that the index with
-            # class names is shifted by 1 -- this is because some networks
-            # were trained on 1000 classes and others on 1001. VGG-16 was trained
-            # on 1000 classes.
-            # print('Probability %0.2f => [%s]' % (probabilities[index], names[index+1]))
+                        fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+                        chrome_trace = fetched_timeline.generate_chrome_trace_format()
+                        with open('timeline_step_%d.json' % (step/cfg.print_every), 'w') as f:
+                            f.write(chrome_trace)
+                    step += 1
+            except tf.errors.OutOfRangeError:
+                print('Done training for %d epochs, %d steps.' % (cfg.num_epochs, step))
+            finally:
+                # When done, ask the threads to stop.
+                coord.request_stop()
 
-        # res = slim.get_model_variables()
+            # Wait for threads to finish.
+            coord.join(threads)
+
+
 if __name__ == "__main__":
     # Read in config file
     assert len(sys.argv) == 2, "Must pass exactly one argument to the script, namely the cfg file, got " + str(len(sys.argv))

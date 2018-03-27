@@ -53,30 +53,6 @@ def preprocess_image(image_file_name_placeholder, mean_rgb, image_size=(227, 227
     img_standardized = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
     img_standardized = tf.expand_dims(img_standardized, 0)
     return img_standardized
-# def preprocess_image(image_file_name_placeholder, input_width, input_height, input_depth, input_mean):
-#     """Adds operations that perform JPEG decoding and resizing to the graph..
-#     Args:
-#     input_width: Desired width of the image fed into the recognizer graph.
-#     input_height: Desired width of the image fed into the recognizer graph.
-#     input_depth: Desired channels of the image fed into the recognizer graph.
-#     input_mean: Pixel value that should be zero in the image for the graph.
-#     input_std: How much to divide the pixel values by before recognition.
-#     Returns:
-#     Tensors for the node to feed JPEG data into, and the output of the
-#       preprocessing steps.
-#     """
-#     image_string = tf.read_file(image_file_name_placeholder)
-#     decoded_image = tf.image.decode_jpeg(image_string, channels=input_depth)
-#     decoded_image_as_float = tf.cast(decoded_image, dtype=tf.float32)
-#     decoded_image_4d = tf.expand_dims(decoded_image_as_float, 0)
-#     resize_shape = tf.stack([input_height, input_width])
-#     resize_shape_as_int = tf.cast(resize_shape, dtype=tf.int32)
-#     resized_image = tf.image.resize_bilinear(decoded_image_4d,
-#                                            resize_shape_as_int)
-#     offset_image = tf.subtract(resized_image, input_mean)
-#     channels = tf.unstack(offset_image, axis=-1)
-#     img_standardized = tf.stack([channels[2], channels[1], channels[0]], axis=-1)
-#     return img_standardized
 
 
 def image_paths_and_labels(img_dir, img_label_file_name):
