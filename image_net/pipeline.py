@@ -17,7 +17,11 @@ class Pipeline(object):
             pad_batch=False,
             # pad_batch=True,
             ##################
-            repeat=None,
+            ##################
+            # NOTE: BEEN ALTERED
+            # repeat=None,
+            repeat=1,
+            ##################
             num_input_threads=args.num_input_threads,
             ####################
             shuffle=True,
@@ -175,12 +179,12 @@ class _InputProcessor(object):
     def _preprocess_image(self, raw_image):
         image = tf.image.decode_jpeg(raw_image, channels=3)
         image = tf.image.resize_images(image, self.target_image_size)
+
         image = tf.image.convert_image_dtype(image, tf.float32)
         if self.distort_image:
             image = tf.image.random_flip_left_right(image)
         # image = tf.transpose(image, [2, 0, 1])
         return image
-
     @staticmethod
     def _parse_serialized_example(serialized_example):
         features = {

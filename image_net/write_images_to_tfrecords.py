@@ -66,7 +66,9 @@ import image_net.labels.label_maps as lm
 
 import numpy as np
 import tensorflow as tf
-
+import scipy
+import tempfile
+import shutil
 
 def _int64_feature(value):
     """Wrapper for inserting int64 features into Example proto."""
@@ -114,7 +116,7 @@ def _convert_to_example(filename, image_buffer, label, text, syn_code, height, w
 class ImageCoder(object):
     """Helper class that provides TensorFlow image coding utilities."""
 
-    def __init__(self):
+    def __init__(self, resize=False, image_size=(256, 256)):
         # Create a single Session to run all image coding calls.
         self._sess = tf.Session()
 
@@ -126,6 +128,26 @@ class ImageCoder(object):
         # Initializes function that decodes RGB JPEG data.
         self._decode_jpeg_data = tf.placeholder(dtype=tf.string)
         self._decode_jpeg = tf.image.decode_jpeg(self._decode_jpeg_data, channels=3)
+
+        if resize:
+            image = self._decode_jpeg
+            smallest_side = float(min(image_size))
+            height, width = tf.shape(image)[0], tf.shape(image)[1]
+            height = tf.to_float(height)
+            width = tf.to_float(width)
+
+            scale = tf.cond(
+                tf.greater(height, width),
+                lambda: smallest_side / width,
+                lambda: smallest_side / height
+            )
+            new_height = tf.to_int32(height * scale)
+            new_width = tf.to_int32(width * scale)
+
+            image = tf.image.resize_images(image, [new_height, new_width])
+            image = tf.image.resize_image_with_crop_or_pad(image, *image_size)
+            # image = tf.image.convert_image_dtype(image, tf.uint8)
+            self._decode_jpeg = image
 
     def png_to_jpeg(self, image_data):
         return self._sess.run(self._png_to_jpeg,
@@ -171,13 +193,23 @@ def _process_image(filename, coder):
     # Decode the RGB JPEG.
     image = coder.decode_jpeg(image_data)
 
+    temp_dir = tempfile.mkdtemp()
+    temp_file = os.path.join(temp_dir, 'temp.JPEG')
+
+    scipy.misc.toimage(image).save(temp_file)
+
+    with tf.gfile.FastGFile(temp_file, 'r') as f:
+        new_image_data = f.read()
+
+    shutil.rmtree(temp_dir)
+
     # Check that image converted to RGB
     assert len(image.shape) == 3
     height = image.shape[0]
     width = image.shape[1]
     assert image.shape[2] == 3
 
-    return image_data, height, width
+    return new_image_data, height, width
 
 
 def _process_image_files_batch(coder, thread_index, ranges, name, filenames,
@@ -224,8 +256,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, filenames,
 
             image_buffer, height, width = _process_image(filename, coder)
 
-            example = _convert_to_example(filename, image_buffer, label, syn_code,
-                                          text, height, width)
+            example = _convert_to_example(filename, image_buffer, label, text, syn_code, height, width)
             writer.write(example.SerializeToString())
             shard_counter += 1
             counter += 1
@@ -245,7 +276,7 @@ def _process_image_files_batch(coder, thread_index, ranges, name, filenames,
     sys.stdout.flush()
 
 
-def _process_image_files(name, filenames, texts, labels, syn_codes, num_shards):
+def _process_image_files(name, filenames, texts, labels, syn_codes, num_shards, resize, image_size):
     """Process and save list of images as TFRecord of Example protos.
     Args:
       name: string, unique identifier specifying the data set
@@ -271,7 +302,7 @@ def _process_image_files(name, filenames, texts, labels, syn_codes, num_shards):
     coord = tf.train.Coordinator()
 
     # Create a generic TensorFlow-based utility for converting all image codings.
-    coder = ImageCoder()
+    coder = ImageCoder(resize=True)
 
     threads = []
     for thread_index in range(len(ranges)):
@@ -362,7 +393,7 @@ def _find_image_files(data_dir, labels_file, val=False, val_labels_file_name=Non
     return filenames, texts, labels, syn_codes
 
 
-def _process_dataset(name, directory, num_shards, labels_file, val_labels_file_name=None):
+def _process_dataset(name, directory, num_shards, labels_file, val_labels_file_name=None, resize=False, image_size=(256, 256)):
     """Process a complete data set and save it as a TFRecord.
     Args:
       name: string, unique identifier specifying the data set.
@@ -372,21 +403,34 @@ def _process_dataset(name, directory, num_shards, labels_file, val_labels_file_n
     """
     val = name == 'validation'
     filenames, texts, labels, syn_codes = _find_image_files(directory, labels_file, val, val_labels_file_name)
-    _process_image_files(name, filenames, texts, labels, syn_codes, num_shards)
+    _process_image_files(name, filenames, texts, labels, syn_codes, num_shards, resize, image_size)
 
 
-def main(unused_argv):
+def main(cfg):
     assert not cfg.train_shards % cfg.num_threads, (
         'Please make the cfg.num_threads commensurate with cfg.train_shards')
-    assert not cfg.validation_shards % cfg.num_threads, (
-        'Please make the cfg.num_threads commensurate with '
-        'cfg.validation_shards')
+    # assert not cfg.validation_shards % cfg.num_threads, (
+        # 'Please make the cfg.num_threads commensurate with '
+        # 'cfg.validation_shards')
 
     # Run it!
-    _process_dataset('validation', cfg.validation_directory,
-                     cfg.validation_shards, cfg.label_defs_file_name, cfg.val_labels_file_name)
-    # _process_dataset('train', cfg.train_directory,
-    #                  cfg.train_shards, cfg.label_defs_file_name)
+    _process_dataset(
+        'validation',
+        cfg.validation_directory,
+        cfg.validation_shards,
+        cfg.label_defs_file_name,
+        cfg.val_labels_file_name,
+        resize=cfg.resize,
+        image_size=cfg.image_size
+    )
+    _process_dataset(
+        'train',
+        cfg.train_directory,
+        cfg.train_shards,
+        cfg.label_defs_file_name,
+        resize=cfg.resize,
+        image_size=cfg.image_size
+    )
 
 
 if __name__ == '__main__':
