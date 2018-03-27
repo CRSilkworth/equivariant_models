@@ -1,8 +1,8 @@
 import glob
 
 model_dir = 'models/test/'
-train_tfrecord_filepaths = sorted(glob.glob('../image_net/tf_records/validation-00000-of-00002*'))
-validation_tfrecord_filepaths = sorted(glob.glob('../image_net/tf_records/train/validation-00001-of-00002*'))
+train_tfrecord_filepaths = sorted(glob.glob('/home/crsilkworth/tf_records_images/train-*'))
+validation_tfrecord_filepaths = sorted(glob.glob('/home/crsilkworth/tf_records_images/validation-*'))
 
 seed = 1
 
