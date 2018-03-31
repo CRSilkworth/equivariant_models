@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-"""Yeephycho implementation
+"""Yeephycho implementation with slight alterations by CRSilkworth.
 Converts image data to TFRecords file format with Example protos.
 The image data set is expected to reside in JPEG files located in the
 following directory structure.
@@ -66,7 +66,7 @@ import image_net.labels.label_maps as lm
 
 import numpy as np
 import tensorflow as tf
-import scipy
+import scipy.misc
 import tempfile
 import shutil
 
@@ -409,9 +409,9 @@ def _process_dataset(name, directory, num_shards, labels_file, val_labels_file_n
 def main(cfg):
     assert not cfg.train_shards % cfg.num_threads, (
         'Please make the cfg.num_threads commensurate with cfg.train_shards')
-    # assert not cfg.validation_shards % cfg.num_threads, (
-        # 'Please make the cfg.num_threads commensurate with '
-        # 'cfg.validation_shards')
+    assert not cfg.validation_shards % cfg.num_threads, (
+        'Please make the cfg.num_threads commensurate with '
+        'cfg.validation_shards')
 
     # Run it!
     _process_dataset(

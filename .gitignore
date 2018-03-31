@@ -63,6 +63,7 @@ target/
 .ipynb_checkpoints
 
 # model stuff
+/models/
 *tfevents*
 *ckpt*
 *pb
