@@ -1,0 +1,5 @@
+model_checkpoint_path: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-30-06-50-41/checkpoints/model.ckpt-40001"
+all_model_checkpoint_paths: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-30-06-50-41/checkpoints/model.ckpt-10001"
+all_model_checkpoint_paths: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-30-06-50-41/checkpoints/model.ckpt-20001"
+all_model_checkpoint_paths: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-30-06-50-41/checkpoints/model.ckpt-30001"
+all_model_checkpoint_paths: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-30-06-50-41/checkpoints/model.ckpt-40001"

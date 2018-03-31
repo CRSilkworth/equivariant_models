@@ -32,6 +32,7 @@ seed = 1
 
 # Data input parameters
 data_format = 'NCHW'
+load_into_memory = False
 shuffle_buffer_size = 10000
 
 # Data data_augmentation
@@ -63,7 +64,7 @@ timeline_interval = 10000
 # Training parameters
 batch_size = 128
 num_epochs = 90
-learning_rate = 0.001
+learning_rate = 0.01
 weight_decay = 0.0005
 momentum = 0.9
 

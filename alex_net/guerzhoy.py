@@ -1,3 +1,6 @@
+# Created on May 31 2018
+# Author: CRSilkworth, based on implementation by guerzhoy
+""" Model definition of AlexNet."""
 import numpy as np
 import tensorflow as tf
 
@@ -22,30 +25,41 @@ def var_wrap(shape, stddev=0.01, bias_init=0):
     return weights, biases
 
 
-def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride_width, channels_in=None, padding="VALID", bias_init=0, name=None, group=1):
+def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride_width, channels_in=None, padding="VALID", bias_init=0, name=None, group=1, reuse=False, data_format='NHWC'):
+    if data_format == 'NHWC':
+        channels_dim = 3
+        strides = [1, stride_height, stride_width, 1]
+
+    elif data_format == 'NCHW':
+        channels_dim = 1
+        strides = [1, 1, stride_height, stride_width]
+
+    else:
+        raise(ValueError), ("data_format must either be NHWC or NCHW")
+
     if channels_in is None:
-        channels_in = int(input.get_shape()[-1])
+        channels_in = int(input.get_shape()[channels_dim])
 
     assert channels_in % group == 0
     assert channels_out % group == 0
 
-    with tf.variable_scope(name):
+    with tf.variable_scope(name, reuse=reuse):
         shape = [kernel_height, kernel_width, channels_in/group, channels_out]
         kernel, biases = var_wrap(shape, bias_init=bias_init)
 
     def convolve(input, kernel):
-        return tf.nn.conv2d(input, kernel, [1, stride_height, stride_width, 1], padding=padding)
+        return tf.nn.conv2d(input, kernel, strides, padding=padding, data_format=data_format)
 
     if group == 1:
         conv = convolve(input, kernel)
     else:
-        input_groups = tf.split(input, group, 3)
+        input_groups = tf.split(input, group, channels_dim)
         kernel_groups = tf.split(kernel, group, 3)
         output_groups = [convolve(i, k) for i, k in zip(input_groups, kernel_groups)]
-        conv = tf.concat(output_groups, 3)
+        conv = tf.concat(output_groups, channels_dim)
 
     r_conv = tf.reshape(
-        tf.nn.bias_add(conv, biases),
+        tf.nn.bias_add(conv, biases, data_format=data_format),
         [-1] + conv.get_shape().as_list()[1:]
     )
 
@@ -68,35 +82,40 @@ def load_weights(session, weights_path, retrain_vars):
     for op_name in weights_dict:
         op_name_string = op_name if isinstance(op_name, str) else op_name.decode('utf8')
 
-        # Check if the layer is one of the layers that should be reinitialized
-        if op_name_string not in retrain_vars:
-            print "  restore: {}".format(op_name_string)
+        print "  restore: {}".format(op_name_string)
+        with tf.variable_scope(op_name_string, reuse=True):
+            # Loop over list of weights/biases and assign them to their corresponding tf variable
 
-            with tf.variable_scope(op_name_string, reuse=True):
-                # Loop over list of weights/biases and assign them to their corresponding tf variable
+            for data in weights_dict[op_name]:
+                # Biases
+                if len(data.shape) == 1:
+                    var = tf.get_variable('biases')
+                    session.run(var.assign(data))
+                # Weights
+                else:
+                    var = tf.get_variable('weights')
+                    session.run(var.assign(data))
 
-                for data in weights_dict[op_name]:
-                    # Biases
-                    if len(data.shape) == 1:
-                        var = tf.get_variable('biases', trainable=False)
-                        session.run(var.assign(data))
-                    # Weights
-                    else:
-                        var = tf.get_variable('weights', trainable=False)
-                        session.run(var.assign(data))
-
-        else:
-            print "  skip: {}".format(op_name_string)
 
 
 class AlexNet(object):
-    def __init__(self, images, keep_prob, num_classes, retrain_layer, image_size=(224, 224), weights_path=None):
+    def __init__(self, images, keep_prob, num_classes, retrain_layer=None, image_size=(224, 224), weights_path=None, reuse=False, data_format='NHWC'):
         self.images = images
         self.keep_prob = keep_prob
         self.num_classes = num_classes
+
         self.retrain_layer = retrain_layer
+        if retrain_layer is None:
+            self.retrain_layer = []
         self.weights_path = weights_path
         self.image_size = image_size
+        self.reuse = reuse
+        self.data_format = data_format
+
+        self.data_format = data_format
+        if data_format == 'NCHW':
+            self.images = tf.transpose(self.images, [0, 3, 1, 2])
+
         self.ops = self.create()
 
     def get_logits(self):
@@ -107,6 +126,15 @@ class AlexNet(object):
 
     def create(self):
         ops = {}
+        if self.data_format == 'NHWC':
+            pool_strides = [1, 2, 2, 1]
+            pool_ksize = [1, 3, 3, 1]
+        elif self.data_format == 'NCHW':
+            pool_strides = [1, 1, 2, 2]
+            pool_ksize = [1, 1, 3, 3]
+        else:
+            raise(ValueError), "Invalid data format"
+
         # conv1
         # kernel_height = 11; kernel_width = 11; channels_out = 96; stride_height = 4; stride_width = 4
         conv1_in = conv(
@@ -120,7 +148,9 @@ class AlexNet(object):
             padding="SAME",
             bias_init=0,
             name='conv1',
-            group=1
+            group=1,
+            reuse=self.reuse,
+            data_format=self.data_format
         )
 
         conv1 = tf.nn.relu(conv1_in, name='conv1')
@@ -143,10 +173,11 @@ class AlexNet(object):
         # kernel_height = 3; kernel_width = 3; stride_height = 2; stride_width = 2; padding = 'VALID'
         maxpool1 = tf.nn.max_pool(
             lrn1,
-            ksize=[1, 3, 3, 1],
-            strides=[1, 2, 2, 1],
+            ksize=pool_ksize,
+            strides=pool_strides,
             padding='VALID',
-            name='maxpool1'
+            name='maxpool1',
+            data_format=self.data_format
         )
         ops['maxpool1'] = maxpool1
 
@@ -163,7 +194,9 @@ class AlexNet(object):
             padding="SAME",
             bias_init=1,
             name='conv2',
-            group=2
+            group=2,
+            reuse=self.reuse,
+            data_format=self.data_format
         )
         conv2 = tf.nn.relu(conv2_in, name='conv2')
         ops['conv2'] = conv2
@@ -184,10 +217,11 @@ class AlexNet(object):
         # kernel_height = 3; kernel_width = 3; stride_height = 2; stride_width = 2; padding = 'VALID'
         maxpool2 = tf.nn.max_pool(
             lrn2,
-            ksize=[1, 3, 3, 1],
-            strides=[1, 2, 2, 1],
+            ksize=pool_ksize,
+            strides=pool_strides,
             padding='VALID',
-            name='maxpool2'
+            name='maxpool2',
+            data_format=self.data_format
         )
         ops['maxpool2'] = maxpool2
 
@@ -203,7 +237,9 @@ class AlexNet(object):
             padding="SAME",
             bias_init=0,
             name='conv3',
-            group=1
+            group=1,
+            reuse=self.reuse,
+            data_format=self.data_format
         )
         conv3 = tf.nn.relu(conv3_in, name='conv3')
         ops['conv3'] = conv3
@@ -221,7 +257,9 @@ class AlexNet(object):
             padding="SAME",
             bias_init=1,
             name='conv4',
-            group=1
+            group=1,
+            reuse=self.reuse,
+            data_format=self.data_format
         )
         conv4 = tf.nn.relu(conv4_in, name='conv4')
         ops['conv4'] = conv4
@@ -239,7 +277,9 @@ class AlexNet(object):
             padding="SAME",
             bias_init=5,
             name='conv5',
-            group=1
+            group=1,
+            reuse=self.reuse,
+            data_format=self.data_format
         )
         conv5 = tf.nn.relu(conv5_in, name='conv5')
         ops['conv5'] = conv5
@@ -248,15 +288,20 @@ class AlexNet(object):
         # kernel_height = 3; kernel_width = 3; stride_height = 2; stride_width = 2; padding = 'VALID'
         maxpool5 = tf.nn.max_pool(
             conv5,
-            ksize=[1, 3, 3, 1],
-            strides=[1, 2, 2, 1],
+            ksize=pool_ksize,
+            strides=pool_strides,
             padding='VALID',
-            name='maxpool5'
+            name='maxpool5',
+            data_format=self.data_format
         )
         ops['maxpool5'] = maxpool5
+
+        if self.data_format == 'NCHW':
+            maxpool5 = tf.transpose(maxpool5, [0, 2, 3, 1])
+
         # fc6
         shape_in = int(np.prod(maxpool5.get_shape()[1:]))
-        with tf.variable_scope('fc6'):
+        with tf.variable_scope('fc6', reuse=self.reuse):
             fc6W, fc6b = var_wrap([shape_in, 4096], bias_init=1)
         flattened = tf.reshape(
             maxpool5,
@@ -267,14 +312,14 @@ class AlexNet(object):
         ops['fc6'] = fc6
 
         # fc7
-        with tf.variable_scope('fc7'):
+        with tf.variable_scope('fc7', reuse=self.reuse):
             fc7W, fc7b = var_wrap([4096, 4096], bias_init=1)
         fc7 = tf.nn.relu_layer(fc6, fc7W, fc7b)
         fc7 = tf.nn.dropout(fc7, self.keep_prob)
         ops['fc7'] = fc7
 
         # fc8
-        with tf.variable_scope('fc8'):
+        with tf.variable_scope('fc8', reuse=self.reuse):
             fc8W, fc8b = var_wrap([4096, self.num_classes], bias_init=1)
         fc8 = tf.nn.xw_plus_b(fc7, fc8W, fc8b)
         ops['fc8'] = fc8

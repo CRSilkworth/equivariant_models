@@ -71,14 +71,21 @@ class AlexNet(Model):
     """
     image_size = 227
 
-    def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], weights_path='./weights/bvlc_alexnet.npy'):
+    def __init__(self, tensor, keep_prob=1.0, num_classes=1000, retrain_layer=[], reuse=False, weights_path='./weights/bvlc_alexnet.npy', data_format='NHWC'):
         # Call the parent class, which will create the graph
         Model.__init__(self, tensor, keep_prob, num_classes, retrain_layer, weights_path)
+        self.reuse = reuse
+
+        self.data_format = data_format
+        if data_format == 'NCHW':
+            self.tensor = tf.transpose(self.tensor, [0, 3, 1, 2])
 
         # Call the create function to build the computational graph
         self.final, self.endpoints = self.create()
 
-    def get_final_op(self):
+
+
+    def get_logits(self):
         return self.final
 
     def get_endpoints(self):
@@ -94,41 +101,54 @@ class AlexNet(Model):
         load_weights(session, self.weights_path, self.retrain_layer)
 
     def create(self):
+        if self.data_format == 'NHWC':
+            pool_strides = [1, 2, 2, 1]
+            pool_ksize = [1, 3, 3, 1]
+        elif self.data_format == 'NCHW':
+            pool_strides = [1, 1, 2, 2]
+            pool_ksize = [1, 1, 3, 3]
+        else:
+            raise(ValueError), "Invalid data format"
+
         # 1st Layer: Conv (w ReLu) -> Pool -> Lrn
-        conv1 = conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1', trainable=self.is_layer_trainable('conv1'))
+        conv1 = conv(self.tensor, 11, 11, 96, 4, 4, padding='VALID', name='conv1', reuse=self.reuse, data_format=self.data_format)
 
         norm1 = tf.nn.local_response_normalization(conv1, depth_radius=2, alpha=2e-05, beta=0.75, bias=1.0, name='norm1')
-        pool1 = tf.nn.max_pool(norm1, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool1')
+
+
+        pool1 = tf.nn.max_pool(norm1, ksize=pool_ksize, strides=pool_strides, padding='VALID', name='pool1', data_format=self.data_format)
 
         # 2nd Layer: Conv (w ReLu) -> Pool -> Lrn with 2 groups
-        conv2 = conv(pool1, 5, 5, 256, 1, 1, groups=2, name='conv2', trainable=self.is_layer_trainable('conv2'), init_biase_val=1)
+        conv2 = conv(pool1, 5, 5, 256, 1, 1, groups=2, name='conv2', init_biase_val=1, reuse=self.reuse, data_format=self.data_format)
         norm2 = tf.nn.local_response_normalization(conv2, depth_radius=2,alpha=2e-05, beta=0.75, bias=1.0, name='norm2')
-        pool2 = tf.nn.max_pool(norm2, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool2')
+        pool2 = tf.nn.max_pool(norm2, ksize=pool_ksize, strides=pool_strides, padding='VALID', name='pool2', data_format=self.data_format)
 
         # 3rd Layer: Conv (w ReLu)
-        conv3 = conv(pool2, 3, 3, 384, 1, 1, name='conv3', trainable=self.is_layer_trainable('conv3'))
+        conv3 = conv(pool2, 3, 3, 384, 1, 1, name='conv3', reuse=self.reuse, data_format=self.data_format)
 
         # 4th Layer: Conv (w ReLu) splitted into two groups
-        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4', trainable=self.is_layer_trainable('conv4'), init_biase_val=1)
+        conv4 = conv(conv3, 3, 3, 384, 1, 1, groups=2, name='conv4', init_biase_val=1, reuse=self.reuse, data_format=self.data_format)
 
         # 5th Layer: Conv (w ReLu) -> Pool splitted into two groups
-        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5', trainable=self.is_layer_trainable('conv5'), init_biase_val=1)
-        pool5 = tf.nn.max_pool(conv5, ksize=[1, 3, 3, 1], strides=[1, 2, 2, 1], padding='VALID', name='pool5')
+        conv5 = conv(conv4, 3, 3, 256, 1, 1, groups=2, name='conv5', init_biase_val=1, reuse=self.reuse, data_format=self.data_format)
+        pool5 = tf.nn.max_pool(conv5, ksize=pool_ksize, strides=pool_strides, padding='VALID', name='pool5', data_format=self.data_format)
 
+        if self.data_format == 'NCHW':
+            pool5 = tf.transpose(pool5, [0, 2, 3, 1])
         # 6th Layer: Flatten -> FC (w ReLu) -> Dropout
 
         pool5_out  = int(np.prod(pool5.get_shape()[1:])) # 6 * 6 * 256 = 9216
 
         pool5_flat = tf.reshape(pool5, [-1, pool5_out]) # shape=(image count, 6, 6, 256) -> shape=(image count, 9216)
-        fc6        = fc(pool5_flat, 4096, name='fc6', trainable=self.is_layer_trainable('fc6'))
+        fc6        = fc(pool5_flat, 4096, name='fc6', reuse=self.reuse)
         dropout6   = tf.nn.dropout(fc6, self.keep_prob)
 
         # 7th Layer: FC (w ReLu) -> Dropout
-        fc7      = fc(dropout6, 4096, name='fc7', trainable=self.is_layer_trainable('fc7'))
+        fc7      = fc(dropout6, 4096, name='fc7',  reuse=self.reuse)
         dropout7 = tf.nn.dropout(fc7, self.keep_prob)
 
         # 8th Layer: FC and return unscaled activations (for tf.nn.softmax_cross_entropy_with_logits)
-        fc8 = fc(dropout7, self.num_classes, relu=False, name='fc8', trainable=self.is_layer_trainable('fc8'))
+        fc8 = fc(dropout7, self.num_classes, relu=False, name='fc8', reuse=self.reuse)
 
         # add layers to the endpoints dict
         endpoints = OrderedDict()
@@ -163,23 +183,20 @@ def load_weights(session, weights_path, retrain_vars):
         op_name_string = op_name if isinstance(op_name, str) else op_name.decode('utf8')
 
         # Check if the layer is one of the layers that should be reinitialized
-        if op_name_string not in retrain_vars:
-            print "  restore: {}".format(op_name_string)
-            with tf.variable_scope(op_name_string, reuse=True):
-                # Loop over list of weights/biases and assign them to their corresponding tf variable
-                for data in weights_dict[op_name]:
-                    # Biases
-                    if len(data.shape) == 1:
-                        var = tf.get_variable('biases', trainable = False)
-                        session.run(var.assign(data))
-                    # Weights
-                    else:
-                        var = tf.get_variable('weights', trainable = False)
-                        session.run(var.assign(data))
-        else:
-            print "  skip: {}".format(op_name_string)
+        print "  restore: {}".format(op_name_string)
+        with tf.variable_scope(op_name_string, reuse=True):
+            # Loop over list of weights/biases and assign them to their corresponding tf variable
+            for data in weights_dict[op_name]:
+                # Biases
+                if len(data.shape) == 1:
+                    var = tf.get_variable('biases')
+                    session.run(var.assign(data))
+                # Weights
+                else:
+                    var = tf.get_variable('weights')
+                    session.run(var.assign(data))
 
-def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, name, trainable = True, padding='SAME', groups=1, init_biase_val=0):
+def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, name, trainable = True, padding='SAME', groups=1, init_biase_val=0, reuse=False, data_format='NHWC'):
     """
     Wrapper around the tensorflow conv-layer op
     Args:
@@ -194,11 +211,22 @@ def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, n
         groups:
     Returns:
     """
+    if data_format == 'NHWC':
+        channels_dim = 3
+        strides = [1, stride_y, stride_x, 1]
 
-    input_channels = int(tensor.get_shape()[-1])
-    
+    elif data_format == 'NCHW':
+        channels_dim = 1
+        strides = [1, 1, stride_y, stride_x]
+
+    else:
+        raise(ValueError), ("data_format must either be NHWC or NCHW")
+
+
+
+    input_channels = int(tensor.get_shape()[channels_dim])
+
     channels_per_layer = int(input_channels / groups) # In case we split the data for multiple parallel conv-layer
-    strides = [1, stride_y, stride_x, 1]
     shape = [filter_height, filter_width, channels_per_layer, num_filters]
 
     # -> Outputs random values from a truncated normal distribution (with the given standard deviation)
@@ -209,16 +237,16 @@ def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, n
         init_b = tf.ones([num_filters])
 
     # tf.nn.conv2d --> Computes a 2-D convolution given 4-D input and filter tensors
-    convolve = lambda input, kernel: tf.nn.conv2d(input, kernel, strides=strides, padding=padding)
 
-    with tf.variable_scope(name) as scope:
+    convolve = lambda input, kernel: tf.nn.conv2d(input, kernel, strides=strides, padding=padding, data_format=data_format)
+    with tf.variable_scope(name, reuse=reuse) as scope:
         # tf.get_variable(...) --> get an existing variable with these parameters or create a new one
         # ... prefixes the name with the current variable scope and performs reuse checks
         weights = tf.get_variable(
             'weights',
             # shape=shape,
-            trainable=trainable,
-            initializer=init_w
+            trainable=True,
+            initializer=init_w,
         )
 
         # Add the convolution
@@ -226,29 +254,28 @@ def conv(tensor, filter_height, filter_width, num_filters, stride_y, stride_x, n
             convolution = convolve(tensor, weights)
         else:
             # In the cases of multiple groups, split inputs & weights and convolve them separately
-            input_groups = tf.split(num_or_size_splits=groups, value=tensor, axis=3)
+            input_groups = tf.split(num_or_size_splits=groups, value=tensor, axis=channels_dim)
             weight_groups = tf.split(num_or_size_splits=groups, value=weights, axis=3)
             output_groups = [convolve(i, k) for i, k in zip(input_groups, weight_groups)]
-            convolution = tf.concat(values=output_groups, axis=3)
+            convolution = tf.concat(values=output_groups, axis=channels_dim)
 
         # Add biases
         biases = tf.get_variable(
             'biases',
             # shape=[num_filters],
-            trainable=trainable,
+            trainable=True,
             initializer=init_b
         )
 
         # out = tf.reshape(tf.nn.bias_add(convolution, biases), convolution.get_shape().as_list())
         # --> reshape([1, 2, 3, 4, 5, 6, 7, 8, 9], [3, 3]) ==> [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
-        out = tf.nn.bias_add(convolution, biases)
-
+        out = tf.nn.bias_add(convolution, biases, data_format=data_format)
         # Apply relu function --> computes rectified linear: max(features, 0)
         relu = tf.nn.relu(out, name=scope.name)
         return relu
 
 
-def fc(tensor, num_out, name, trainable = True, relu = True):
+def fc(tensor, num_out, name, trainable = True, relu = True, reuse=False):
     """
     Wrapper around the tensorflow fully connected layer op
     Args:
@@ -263,19 +290,19 @@ def fc(tensor, num_out, name, trainable = True, relu = True):
     init_w = tf.truncated_normal([num_in, num_out], name='weights', dtype=tf.float32, stddev=0.01)
     init_b = tf.ones([num_out]) # tf.zeros([num_out])
 
-    with tf.variable_scope(name) as scope:
+    with tf.variable_scope(name, reuse=reuse) as scope:
 
         # Create tf variables for the weights and biases
         weights = tf.get_variable(
             'weights',
             # shape=[num_in, num_out],
-            trainable=trainable,
+            trainable=True,
             initializer=init_w
         )
         biases = tf.get_variable(
             'biases',
             # shape=[num_out],
-            trainable=trainable,
+            trainable=True,
             initializer=init_b
         )
 

@@ -32,6 +32,7 @@ seed = 1
 
 # Data input parameters
 data_format = 'NCHW'
+load_into_memory = False
 shuffle_buffer_size = 10000
 
 # Data data_augmentation
