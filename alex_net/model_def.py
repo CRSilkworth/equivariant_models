@@ -3,6 +3,7 @@
 """Model definition of AlexNet."""
 import numpy as np
 import tensorflow as tf
+import constrained_weights.flip_constrained as fe
 
 
 def var_wrap(shape, stddev=0.01, bias_init=0):
@@ -88,7 +89,7 @@ def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride
 class AlexNet(object):
     """Class which holds the network architecture, several helper functions and model parameters."""
 
-    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC'):
+    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_layers=None):
         """
         Create an AlexNet model. Recieves a tensor of images, feeds it through the network architecture and produces unscaled logits.
 
@@ -105,6 +106,9 @@ class AlexNet(object):
         self.image_size = image_size
 
         self.data_format = data_format
+        self.flip_constrain_layers = flip_constrain_layers
+        if flip_constrain_layers is None:
+            self.flip_constrain_layers = []
 
         if data_format == 'NCHW':
             self.images = tf.transpose(self.images, [0, 3, 1, 2])
@@ -263,19 +267,36 @@ class AlexNet(object):
                 data_format=self.data_format
             )
 
+            # If it's 'NCHW' then transform it back to 'NHWC'.
             if self.data_format == 'NCHW':
                 maxpool5 = tf.transpose(maxpool5, [0, 2, 3, 1])
             ops['maxpool5'] = maxpool5
 
         # FULLY CONNECTED 6
         with tf.variable_scope('fc6'):
-            shape_in = int(np.prod(maxpool5.get_shape()[1:]))
-            fc6W, fc6b = var_wrap([shape_in, 4096], bias_init=1)
-            flattened = tf.reshape(
-                maxpool5,
-                [-1, shape_in]
-            )
-            fc6 = tf.nn.relu_layer(flattened, fc6W, fc6b)
+            if 'fc6' not in self.flip_constrain_layers:
+                shape_in = int(np.prod(maxpool5.get_shape()[1:]))
+                fc6W, fc6b = var_wrap([shape_in, 4096], bias_init=1)
+                flattened = tf.reshape(
+                    maxpool5,
+                    [-1, shape_in]
+                )
+                fc6 = tf.nn.relu_layer(flattened, fc6W, fc6b)
+            else:
+                shape_in = max.get_shape()[1:]
+                shape_out = [shape_in[0], shape_in[1], 4096/(shape_in[0] * shape_in[1])]
+
+                fc6_in = fe.flip_equivariant_layer(
+                    input=maxpool5,
+                    shape_out=shape_out,
+                    flip_axis=1,
+                    initializer=tf.truncated_normal,
+                    initializer_kwargs={'mean': 0, 'stddev': 0.01},
+                    bias_init=1,
+                    flatten=True
+                    )
+                fc6 = tf.nn.relu(fc6_in)
+
             fc6 = tf.nn.dropout(fc6, self.keep_prob)
             ops['fc6'] = fc6
 
