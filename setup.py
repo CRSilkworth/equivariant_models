@@ -41,7 +41,7 @@ setup(
                                     'unitTest.*', '*.unitTest.*', 'projects', 'projects.*']),
     install_requires=[
         'numpy==1.13.0',
-        'tensorflow>=1.4.0',
+        'tensorflow-gpu>=1.5.0',
         'scipy>= 0.19.0',
         'scikit-learn>=0.19.1',
         'scikit-optimize==0.5',
