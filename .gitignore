@@ -94,7 +94,7 @@ target/
 *.bk
 *.npy
 *.rtf
-
+**/runs/**
 #Summary files
 *summary_logs/*
 
