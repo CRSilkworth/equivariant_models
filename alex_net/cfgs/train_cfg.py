@@ -4,6 +4,7 @@ import os
 import alex_net.pjaehrling as pj
 import alex_net.kratzert as kr
 import alex_net.guerzhoy as gu
+import alex_net.model_def as md
 
 # File paths
 root_dir = '/home/crsilkworth/equivariant_models'
@@ -16,10 +17,10 @@ summary_dir = os.path.join(root_dir, 'alex_net/summaries')
 timeline_dir = os.path.join(root_dir, 'alex_net/timelines')
 
 # Model parameters
-model_type = gu.AlexNet
+model_type = md.AlexNet
 
 # Setup parameters
-continue_training_run = "2018-03-30-11-25-25"
+continue_training_run = '2018-04-01-19-48-36'
 use_pretrained_weights = False
 image_size = [256, 256]
 crop_image_size = [224, 224]
@@ -35,7 +36,7 @@ data_format = 'NCHW'
 shuffle_buffer_size = 10000
 
 # Data data_augmentation
-rgb_stddev = 0.3
+rgb_stddev = 0.1
 
 # RGB summary attributes
 rgb_mean = np.array([123.68, 116.779, 103.939], dtype=np.float32)
@@ -62,8 +63,8 @@ timeline_interval = 10000
 
 # Training parameters
 batch_size = 128
-num_epochs = 90
-learning_rate = 0.001
+num_epochs = None
+learning_rate = 0.00001
 weight_decay = 0.0005
 momentum = 0.9
 

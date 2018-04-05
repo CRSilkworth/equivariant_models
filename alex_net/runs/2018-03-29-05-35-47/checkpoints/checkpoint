@@ -1,2 +1,0 @@
-model_checkpoint_path: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-29-05-35-47/checkpoints/model.ckpt-0"
-all_model_checkpoint_paths: "/home/crsilkworth/equivariant_models/alex_net/runs/2018-03-29-05-35-47/checkpoints/model.ckpt-0"

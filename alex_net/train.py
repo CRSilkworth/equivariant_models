@@ -29,7 +29,7 @@ import sys
 import imp
 import time
 import datetime
-
+import subprocess
 
 def configs(cfg):
     """Helper function which holds all the session configuration info."""
@@ -155,6 +155,12 @@ def main(cfg, cfg_file_name=None):
         run_str = cfg.continue_training_run
         cur_run_dir = os.path.join(cfg.run_dir, run_str)
 
+        # Copy last checkpoint to the restart checkpoint dir
+        checkpoint_dir = u.maybe_create_dir(cur_run_dir, 'checkpoints')
+        restart_dir = u.maybe_create_dir(cur_run_dir, 'restart_checkpoints')
+        latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+        subprocess.call('cp ' + latest_checkpoint + ' ' + restart_dir, shell=True)
+
     with tf.Graph().as_default() as graph:
 
         # Define the dictionary which hold additional ops to be fed to sess.run
@@ -175,7 +181,6 @@ def main(cfg, cfg_file_name=None):
             images,
             num_classes=cfg.num_classes,
             keep_prob=keep_prob,
-            reuse=False,
             data_format=cfg.data_format
         )
 

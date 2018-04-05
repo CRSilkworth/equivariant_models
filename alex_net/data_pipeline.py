@@ -42,7 +42,7 @@ class AlexNetDataset:
         if additional_data_keys is None:
             self.additional_data_keys = []
 
-        self.dataset = self.dataset.map(self._read_and_decode, num_parllel_calls=self.num_threads, output_buffer_size=self.batch_size)
+        self.dataset = self.dataset.map(self._read_and_decode, num_parallel_calls=self.num_threads, output_buffer_size=self.batch_size)
 
         self.dataset = self.dataset.shuffle(buffer_size=self.shuffle_buffer_size)
 
@@ -90,7 +90,7 @@ class AlexNetDataset:
         return image, label
 
     def reinitializable_iterator(self, batched=True):
-        dataset = self.dataset.map(self._map_func, num_parllel_calls=self.num_threads, output_buffer_size=self.batch_size)
+        dataset = self.dataset.map(self._map_func, num_parallel_calls=self.num_threads, output_buffer_size=self.batch_size)
         if batched:
             dataset = dataset.batch(self.batch_size)
 
@@ -102,7 +102,7 @@ class AlexNetDataset:
         )
 
     def iterator_initializer(self, iterator, skip=None, batched=True):
-        dataset = self.dataset.map(self._map_func, num_parllel_calls=self.num_threads, output_buffer_size=self.batch_size)
+        dataset = self.dataset.map(self._map_func, num_parallel_calls=self.num_threads, output_buffer_size=self.batch_size)
         if batched:
             dataset = dataset.batch(self.batch_size)
 

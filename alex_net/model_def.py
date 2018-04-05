@@ -144,7 +144,6 @@ class AlexNet(object):
                 padding="SAME",
                 bias_init=0,
                 group=1,
-                reuse=self.reuse,
                 data_format=self.data_format
             )
 
@@ -170,8 +169,8 @@ class AlexNet(object):
             )
             ops['maxpool1'] = maxpool1
 
-        # CONVOLUTION 3
-        with tf.variable_scope('conv3'):
+        # CONVOLUTION 2
+        with tf.variable_scope('conv2'):
             conv2_in = conv(
                 input=maxpool1,
                 kernel_height=5,
@@ -182,7 +181,6 @@ class AlexNet(object):
                 padding="SAME",
                 bias_init=1,
                 group=2,
-                reuse=self.reuse,
                 data_format=self.data_format
             )
             conv2 = tf.nn.relu(conv2_in)
@@ -218,7 +216,6 @@ class AlexNet(object):
                 padding="SAME",
                 bias_init=0,
                 group=1,
-                reuse=self.reuse,
                 data_format=self.data_format
             )
             conv3 = tf.nn.relu(conv3_in)
@@ -236,7 +233,6 @@ class AlexNet(object):
                 padding="SAME",
                 bias_init=1,
                 group=1,
-                reuse=self.reuse,
                 data_format=self.data_format
             )
             conv4 = tf.nn.relu(conv4_in)
@@ -254,7 +250,6 @@ class AlexNet(object):
                 padding="SAME",
                 bias_init=5,
                 group=1,
-                reuse=self.reuse,
                 data_format=self.data_format
             )
             conv5 = tf.nn.relu(conv5_in)
@@ -273,7 +268,7 @@ class AlexNet(object):
             ops['maxpool5'] = maxpool5
 
         # FULLY CONNECTED 6
-        with tf.variable_scope('fc6', reuse=self.reuse):
+        with tf.variable_scope('fc6'):
             shape_in = int(np.prod(maxpool5.get_shape()[1:]))
             fc6W, fc6b = var_wrap([shape_in, 4096], bias_init=1)
             flattened = tf.reshape(
@@ -285,14 +280,14 @@ class AlexNet(object):
             ops['fc6'] = fc6
 
         # FULLY CONNECTED 7
-        with tf.variable_scope('fc7', reuse=self.reuse):
+        with tf.variable_scope('fc7'):
             fc7W, fc7b = var_wrap([4096, 4096], bias_init=1)
             fc7 = tf.nn.relu_layer(fc6, fc7W, fc7b)
             fc7 = tf.nn.dropout(fc7, self.keep_prob)
             ops['fc7'] = fc7
 
         # FULLY CONNECTED 8
-        with tf.variable_scope('fc8', reuse=self.reuse):
+        with tf.variable_scope('fc8'):
             fc8W, fc8b = var_wrap([4096, self.num_classes], bias_init=1)
             fc8 = tf.nn.xw_plus_b(fc7, fc8W, fc8b)
             ops['fc8'] = fc8
