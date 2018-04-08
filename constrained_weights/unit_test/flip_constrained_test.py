@@ -74,6 +74,54 @@ class TestConstrainedWeights(unittest.TestCase):
         flip_axis = 0
         self._test_wrapper(sess, shape_in, shape_out, flip_axis)
 
+    def test_flip_invariant_weights(self):
+        with tf.variable_scope('1'):
+            shape1 = [4, 4]
+            weights1 = fc.flip_invariant_weights(shape1, in_axis=1, out_axis=0)
+        with tf.variable_scope('2'):
+            shape2 = [5, 3]
+            weights2 = fc.flip_invariant_weights(shape2, in_axis=1, out_axis=0)
+        with tf.variable_scope('3'):
+            shape3 = [4, 5]
+            weights3 = fc.flip_invariant_weights(shape3, in_axis=1, out_axis=0)
+        with tf.variable_scope('4'):
+            shape4 = [4, 5, 2]
+            weights4 = fc.flip_invariant_weights(shape4, in_axis=1, out_axis=0)
+        with tf.variable_scope('5'):
+            shape5 = [4, 5, 3]
+            weights5 = fc.flip_invariant_weights(shape5, out_axis=1, in_axis=2)
+
+        with tf.variable_scope('6'):
+            shape6 = [4, 5, 3, 12]
+            weights6 = fc.flip_invariant_weights(shape6, out_axis=1, in_axis=3)
+
+
+        sess = tf.Session()
+
+        sess.run(tf.global_variables_initializer())
+
+        weights1_e = sess.run(weights1)
+        print weights1_e
+        # self._satisfied(weights1_e, 0, 1)
+        # self._assert_invariant(weights1_e, 0, 1)
+        #
+        # weights2_e = sess.run(weights2)
+        # self._satisfied(weights2_e, 0, 1)
+        # self._assert_invariant(weights2_e, 0, 1)
+        #
+        # weights3_e = sess.run(weights3)
+        # self._satisfied(weights3_e, 0, 1)
+        # self._assert_invariant(weights3_e, 0, 1)
+        #
+        # weights4_e = sess.run(weights4)
+        # self._satisfied(weights4_e, 0, 1)
+        #
+        # weights5_e = sess.run(weights5)
+        # self._satisfied(weights5_e, 2, 1)
+        #
+        # weights6_e = sess.run(weights6)
+        # self._satisfied(weights6_e, 1, 3)
+        # self._assert_invariant(weights6_e, 1, 3)
     def _test_wrapper(self, sess, shape_in, shape_out, flip_axis):
         r_string = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
         with tf.variable_scope(r_string):

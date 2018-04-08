@@ -54,7 +54,6 @@ def flip_equivariant_layer(input, shape_out, flip_axis, initializer=None, initia
     rank_in = len(shape_in)
     rank_out = len(shape_out)
 
-    print shape,  flip_axis, flip_axis + rank_out
     weights = flip_equivariant_weights(shape, flip_axis,  flip_axis + rank_out, initializer=initializer, initializer_kwargs=initializer_kwargs)
 
     axes = [range(1, rank_in + 1), range(rank_out, rank_out + rank_in)]
