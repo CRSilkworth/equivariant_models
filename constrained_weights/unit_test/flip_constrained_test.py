@@ -58,37 +58,35 @@ class TestConstrainedWeights(unittest.TestCase):
 
         sess = tf.Session()
 
-        shape_in = [3, 4, 2]
-        shape_out = [3, 4, 5]
+        shape_in = [2, 3, 1]
+        shape_out = [1, 2, 3]
         flip_axis = 1
         self._test_wrapper(sess, shape_in, shape_out, flip_axis)
 
-
-        shape_in = [2, 3, 2]
-        shape_out = [3, 4, 5]
-        flip_axis = 1
-        self._test_wrapper(sess, shape_in, shape_out, flip_axis)
-
-        shape_in = [3, 4, 2]
-        shape_out = [3, 4, 5]
-        flip_axis = 0
-        self._test_wrapper(sess, shape_in, shape_out, flip_axis)
+        # shape_in = [2, 3, 2]
+        # shape_out = [3, 4, 5]
+        # flip_axis = 1
+        # self._test_wrapper(sess, shape_in, shape_out, flip_axis)
+        #
+        # shape_in = [3, 4, 2]
+        # shape_out = [3, 4, 5]
+        # flip_axis = 0
+        # self._test_wrapper(sess, shape_in, shape_out, flip_axis)
 
     def _test_wrapper(self, sess, shape_in, shape_out, flip_axis):
         r_string = ''.join([random.choice(string.ascii_lowercase) for i in range(5)])
         with tf.variable_scope(r_string):
             input = self._create_input(shape_in, flip_axis)
-            output = fc.flip_equivariant_layer(input, shape_out, flip_axis, flatten=False)
+            output = fc.flip_equivariant_layer(input, shape_out, flip_axis)
 
         sess.run(tf.global_variables_initializer())
-        # output_e = sess.run(output)
-        output_e = sess.run(input)
-
-
-
-        self.assertTrue(
-            self._is_close(output_e[0], np.flip(output_e[1], axis=flip_axis))
-        )
+        input_e, output_e = sess.run([input, output])
+        # output_e = sess.run(input)
+        print input_e[0].flatten(), input_e[1].flatten()
+        print output_e
+        # self.assertTrue(
+        #     self._is_close(output_e[0], np.flip(output_e[1], axis=flip_axis))
+        # )
 
     def _create_input(self, shape, flip_axis):
 
