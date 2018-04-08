@@ -192,7 +192,8 @@ def main(cfg, cfg_file_name=None):
             num_classes=cfg.num_classes,
             keep_prob=keep_prob,
             data_format=cfg.data_format,
-            flip_constrain_fc6=cfg.flip_constrain_fc6
+            flip_constrain_fc6=cfg.flip_constrain_fc6,
+            flip_weights_func=cfg.flip_weights_func
 
         )
 

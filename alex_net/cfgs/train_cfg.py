@@ -5,6 +5,7 @@ import alex_net.pjaehrling as pj
 import alex_net.kratzert as kr
 import alex_net.guerzhoy as gu
 import alex_net.model_def as md
+import constrained_weights.flip_constrained as fc
 
 # File paths
 root_dir = '/home/crsilkworth/equivariant_models'
@@ -23,6 +24,7 @@ model_type = md.AlexNet
 continue_training_run = None
 checkpoint_start_step = None
 flip_constrain_fc6 = True
+flip_weights_func = fc.flip_equivariant_weights
 use_pretrained_weights = False
 image_size = [256, 256]
 crop_image_size = [224, 224]

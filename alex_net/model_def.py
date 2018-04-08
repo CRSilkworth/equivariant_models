@@ -89,7 +89,7 @@ def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride
 class AlexNet(object):
     """Class which holds the network architecture, several helper functions and model parameters."""
 
-    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_fc6=False):
+    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_fc6=False, flip_weights_func=None):
         """
         Create an AlexNet model. Recieves a tensor of images, feeds it through the network architecture and produces unscaled logits.
 
@@ -107,7 +107,7 @@ class AlexNet(object):
 
         self.data_format = data_format
         self.flip_constrain_fc6 = flip_constrain_fc6
-
+        self.flip_weights_func = flip_weights_func
         if data_format == 'NCHW':
             self.images = tf.transpose(self.images, [0, 3, 1, 2])
 
@@ -291,6 +291,7 @@ class AlexNet(object):
                     initializer=tf.truncated_normal,
                     initializer_kwargs={'mean': 0, 'stddev': 0.01},
                     bias_init=1,
+                    weights_func=self.flip_weights_func,
                     activation='relu'
                     )
 

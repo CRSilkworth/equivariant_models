@@ -51,23 +51,30 @@ def flip_invariant_weights(shape, out_axis, in_axis, initializer=None, initializ
     in_dim = shape[in_axis]
     out_dim = shape[out_axis]
 
-    degrees_of_freedom = out_dim/2 if out_dim % 2 == 0 else out_dim/2 + 1
+    degrees_of_freedom = in_dim/2 if in_dim % 2 == 0 else in_dim/2 + 1
     degrees_of_freedom = np.array([degrees_of_freedom], dtype=np.int32)
 
     irrelevant_dims = [dim for axis, dim in enumerate(shape) if axis not in (in_axis, out_axis)]
     irrelevant_axes = [axis for axis, dim in enumerate(shape) if axis not in (in_axis, out_axis)]
 
-    half_shape = np.concatenate([degrees_of_freedom, in_dim, irrelevant_dims], axis=0)
+    half_shape = np.concatenate([[out_dim], degrees_of_freedom, irrelevant_dims], axis=0)
     half_shape = half_shape.astype(np.int32)
 
     half_weights = tf.get_variable(
         'weights',
         initializer=initializer(shape=half_shape, **initializer_kwargs)
     )
-    if out_dim % 2 == 0:
-        weights = tf.concat([half_weights, tf.reverse(half_weights, axis=[0])], axis=0)
+
+    if in_dim % 2 == 0:
+        weights = tf.concat(
+            [half_weights, tf.reverse(half_weights, axis=[1])],
+            axis=1
+        )
     else:
-        weights = tf.concat([half_weights, tf.reverse(half_weights, axis=[0])[1:]], axis=0)
+        weights = tf.concat(
+            [half_weights, tf.reverse(half_weights, axis=[1])[:, 1:]],
+            axis=1
+        )
 
     old_indices = [out_axis, in_axis] + irrelevant_axes
     new_indices = []
@@ -79,14 +86,13 @@ def flip_invariant_weights(shape, out_axis, in_axis, initializer=None, initializ
     return weights
 
 
-def flip_equivariant_layer(input, shape_out, flip_axis, initializer=None, initializer_kwargs=None, bias_init=0, activation=None):
+def flip_layer(input, shape_out, flip_axis, initializer=None, initializer_kwargs=None, bias_init=0, weights_func=flip_equivariant_weights, activation=None):
     shape_in = input.get_shape()[1:]
 
     shape = np.concatenate([shape_out, shape_in], axis=0)
-    # rank_in = len(shape_in)
     rank_out = len(shape_out)
 
-    weights = flip_equivariant_weights(shape, flip_axis,  flip_axis + rank_out, initializer=initializer, initializer_kwargs=initializer_kwargs)
+    weights = weights_func(shape, flip_axis,  flip_axis + rank_out, initializer=initializer, initializer_kwargs=initializer_kwargs)
 
     num_rows = int(np.prod(shape_out))
     num_cols = int(np.prod(shape_in))
