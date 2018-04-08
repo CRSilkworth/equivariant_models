@@ -87,7 +87,8 @@ def define_datasets(cfg, to_run=None):
 
     # Add random crop, random flip and pixel distortions to the images.
     train_dataset.random_crop(cfg.crop_image_size)
-    train_dataset.random_flip()
+    if not cfg.flip_constrain_fc6:
+        train_dataset.random_flip()
     train_dataset.rgb_distort(
         rgb_eigenvectors=cfg.rgb_eigenvectors,
         rgb_eigenvalues=cfg.rgb_eigenvalues,
@@ -159,6 +160,15 @@ def main(cfg, cfg_file_name=None):
         checkpoint_dir = u.maybe_create_dir(cur_run_dir, 'checkpoints')
         restart_dir = u.maybe_create_dir(cur_run_dir, 'restart_checkpoints')
         latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+        if cfg.checkpoint_start_step is None:
+            latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+        else:
+            latest_checkpoint = os.path.join(
+                checkpoint_dir,
+                'model.ckpt-' + str(cfg.checkpoint_start_step)
+            )
+
+        print latest_checkpoint
         subprocess.call('cp ' + latest_checkpoint + ' ' + restart_dir, shell=True)
 
     with tf.Graph().as_default() as graph:
@@ -181,7 +191,9 @@ def main(cfg, cfg_file_name=None):
             images,
             num_classes=cfg.num_classes,
             keep_prob=keep_prob,
-            data_format=cfg.data_format
+            data_format=cfg.data_format,
+            flip_constrain_fc6=cfg.flip_constrain_fc6
+
         )
 
         # Get the logits produced by the model
@@ -253,26 +265,27 @@ def main(cfg, cfg_file_name=None):
                 checkpoint_dir = os.path.join(cur_run_dir, 'checkpoints')
                 saver.restore(
                     sess,
-                    tf.train.latest_checkpoint(checkpoint_dir)
+                    latest_checkpoint
                 )
             elif cfg.use_pretrained_weights:
                 to.load_weights(sess, cfg.pretrained_weights_file)
 
-            step = sess.run(global_step)
-            print "STARTING STEP:", step
+            gs = sess.run(global_step)
+            print "STARTING STEP:", gs
 
             # Dump the configuration file into the run directory for
             # posteriority.
             if cfg_file_name is not None:
-                u.dump_cfg_file(cfg_file_name, cur_run_dir, step)
+                u.dump_cfg_file(cfg_file_name, cur_run_dir, gs)
 
             begin_time = time.time()
             total_step_time = 0
+            step = 0
             try:
                 # Start the main train loop. Runs until user hits ctrl-c
                 while True:
                     step_start_time = time.time()
-                    results, _, step = sess.run(
+                    results, _, gs = sess.run(
                         [to_run, optimize, global_step],
                         options=options,
                         run_metadata=run_metadata,
@@ -285,33 +298,34 @@ def main(cfg, cfg_file_name=None):
                     step_time = time.time() - step_start_time
                     total_step_time += step_time
                     total_time = time.time() - begin_time
+                    step += 1
 
                     # Print info every interval.
-                    if step % cfg.print_interval == 0 and step > 0:
-                        u.print_info(results, step, step_time, total_time)
+                    if gs % cfg.print_interval == 0 and gs > 0:
+                        u.print_info(results, step, step_time, total_time, step)
 
                     # Write a timeline every interval
-                    if step % cfg.timeline_interval == 0 and step > 0:
+                    if gs % cfg.timeline_interval == 0 and gs > 0:
                         u.write_timeline(cur_run_dir, run_metadata, step)
 
                     # Save the model every interval
-                    if step % cfg.checkpoint_interval == 0 and step > 0:
+                    if gs % cfg.checkpoint_interval == 0 and gs > 0:
                         u.write_checkpoint(saver, sess, cur_run_dir, global_step)
 
                     # Write summaries every interval.
-                    if step % cfg.summary_interval == 0 and step > 0:
+                    if gs % cfg.summary_interval == 0 and gs > 0:
                         # write the variable summaries.
-                        so.write_var_summaries(sess, train_writer, var_summaries, step, total_step_time/step)
+                        so.write_var_summaries(sess, train_writer, var_summaries, gs, total_step_time/step)
 
                         # Set data_iter to pull from train_eval and write the
                         # summaries.
                         sess.run(train_eval_initializer)
-                        so.write_summaries(sess, train_writer, summaries_dict, step)
+                        so.write_summaries(sess, train_writer, summaries_dict, gs)
 
                         # Set data_iter to pull from validation and write the
                         # summaries.
                         sess.run(val_eval_initializer)
-                        so.write_summaries(sess, val_writer, summaries_dict, step)
+                        so.write_summaries(sess, val_writer, summaries_dict, gs)
 
                         # Set the data_iter to pull from training data again.
                         train_initializer = train_dataset.iterator_initializer(data_iter)

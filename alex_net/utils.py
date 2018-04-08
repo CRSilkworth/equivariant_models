@@ -40,7 +40,7 @@ def maybe_create_dir(*args):
     return full_dir
 
 
-def print_info(results, step, step_time, total_time):
+def print_info(results, global_step, step_time, total_time, step=None):
     """
     Print some information about training.
 
@@ -50,8 +50,10 @@ def print_info(results, step, step_time, total_time):
         step_time: float (seconds). The length of time it took to run the step.
         total_time: float (seconds). The length of time the training has been running.
     """
+    if step is None:
+        step = global_step
     print('------------------------------------------')
-    print('Step %d: (%.3f sec)' % (step, step_time))
+    print('Global step %d: (%.3f sec)' % (global_step, step_time))
     print('Total_time: %.3f') % (total_time,)
     print('Time per step: %.3f' % (total_time/step,))
     print('Loss: %.3f' % results['loss'])
