@@ -95,7 +95,7 @@ def write_summaries(sess, writer, summaries_dict, step):
 
     except tf.errors.OutOfRangeError:
         pass
-    
+
     summary = tf.Summary()
     for key in results_dict:
         # Take the average of all the steps and add it to a summary.

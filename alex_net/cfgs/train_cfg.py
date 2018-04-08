@@ -20,7 +20,9 @@ timeline_dir = os.path.join(root_dir, 'alex_net/timelines')
 model_type = md.AlexNet
 
 # Setup parameters
-continue_training_run = '2018-04-01-19-48-36'
+continue_training_run = None
+checkpoint_start_step = None
+flip_constrain_fc6 = True
 use_pretrained_weights = False
 image_size = [256, 256]
 crop_image_size = [224, 224]
@@ -56,7 +58,7 @@ bgr = True
 
 # Intervals
 print_interval = 1000
-keep_last_n_checkpoints = 10
+keep_last_n_checkpoints = 25
 summary_interval = 10000
 checkpoint_interval = 10000
 timeline_interval = 10000
@@ -64,8 +66,8 @@ timeline_interval = 10000
 # Training parameters
 batch_size = 128
 num_epochs = None
-learning_rate = 0.00001
-weight_decay = 0.0005
+learning_rate = 0.001
+weight_decay = 0.001
 momentum = 0.9
 
 # Eval paramters

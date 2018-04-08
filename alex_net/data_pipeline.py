@@ -56,6 +56,8 @@ class AlexNetDataset:
         self.add_random_crop = False
         self.add_random_flip = False
         self.add_rgb_distort = False
+        self.add_five_crops = False
+        self.add_horizontal_flip = False
 
     def center_crop(self, crop_image_size):
         self.add_center_crop = True
@@ -74,6 +76,13 @@ class AlexNetDataset:
         self.rgb_eigenvalues = rgb_eigenvalues
         self.rgb_stddev = stddev
 
+    def five_crops(self, crop_image_size):
+        self.add_five_crops = True
+        self.crop_image_size = crop_image_size
+
+    def horizontal_flip(self):
+        self.add_horizontal_flip = True
+
     def _map_func(self, image, label):
         mean = tf.reshape(self.rgb_mean, [1, 1, 3])
         image = tf.subtract(image, mean)
@@ -89,8 +98,22 @@ class AlexNetDataset:
 
         return image, label
 
+    def add_five_crops_to_batch(self, image, label):
+        return dt.add_five_crops_to_batch(image, label, self.image_size, self.crop_image_size)
+
+    def add_horizontal_flip_to_batch(self, image, label):
+        return dt.add_horizontal_flip_to_batch(image, label)
+
     def reinitializable_iterator(self, batched=True):
         dataset = self.dataset.map(self._map_func, num_parallel_calls=self.num_threads, output_buffer_size=self.batch_size)
+
+        if self.add_five_crops or self.add_horizontal_flip:
+            dataset = dataset.map(self._expand_dims)
+        if self.add_five_crops:
+            dataset = dataset.map(self.add_five_crops_to_batch)
+        if self.add_horizontal_flip:
+            dataset = dataset.map(self.add_horizontal_flip_to_batch)
+
         if batched:
             dataset = dataset.batch(self.batch_size)
 
@@ -103,6 +126,14 @@ class AlexNetDataset:
 
     def iterator_initializer(self, iterator, skip=None, batched=True):
         dataset = self.dataset.map(self._map_func, num_parallel_calls=self.num_threads, output_buffer_size=self.batch_size)
+
+        if self.add_five_crops or self.add_horizontal_flip:
+            dataset = dataset.map(self._expand_dims)
+        if self.add_five_crops:
+            dataset = dataset.map(self.add_five_crops_to_batch)
+        if self.add_horizontal_flip:
+            dataset = dataset.map(self.add_horizontal_flip_to_batch)
+
         if batched:
             dataset = dataset.batch(self.batch_size)
 
@@ -140,6 +171,9 @@ class AlexNetDataset:
         image = tf.subtract(image, mean)
 
         return image, label
+
+    def _expand_dims(self, image, label):
+        return tf.expand_dims(image, axis=0), tf.expand_dims(label, axis=0)
 
     def _add_keep_prob(self, images, labels):
         return images, labels, tf.constant(self.keep_prob)

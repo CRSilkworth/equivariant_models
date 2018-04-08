@@ -89,7 +89,7 @@ def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride
 class AlexNet(object):
     """Class which holds the network architecture, several helper functions and model parameters."""
 
-    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_layers=None):
+    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_fc6=False):
         """
         Create an AlexNet model. Recieves a tensor of images, feeds it through the network architecture and produces unscaled logits.
 
@@ -106,9 +106,7 @@ class AlexNet(object):
         self.image_size = image_size
 
         self.data_format = data_format
-        self.flip_constrain_layers = flip_constrain_layers
-        if flip_constrain_layers is None:
-            self.flip_constrain_layers = []
+        self.flip_constrain_fc6 = flip_constrain_fc6
 
         if data_format == 'NCHW':
             self.images = tf.transpose(self.images, [0, 3, 1, 2])
@@ -274,7 +272,7 @@ class AlexNet(object):
 
         # FULLY CONNECTED 6
         with tf.variable_scope('fc6'):
-            if 'fc6' not in self.flip_constrain_layers:
+            if not self.flip_constrain_fc6:
                 shape_in = int(np.prod(maxpool5.get_shape()[1:]))
                 fc6W, fc6b = var_wrap([shape_in, 4096], bias_init=1)
                 flattened = tf.reshape(
@@ -283,26 +281,26 @@ class AlexNet(object):
                 )
                 fc6 = tf.nn.relu_layer(flattened, fc6W, fc6b)
             else:
-                shape_in = max.get_shape()[1:]
-                shape_out = [shape_in[0], shape_in[1], 4096/(shape_in[0] * shape_in[1])]
+                shape_in = maxpool5.get_shape()[1:]
+                shape_out = [shape_in[0], shape_in[1], 4096/(int(shape_in[0]) * int(shape_in[1]))]
 
-                fc6_in = fe.flip_equivariant_layer(
+                fc6 = fe.flip_equivariant_layer(
                     input=maxpool5,
                     shape_out=shape_out,
                     flip_axis=1,
                     initializer=tf.truncated_normal,
                     initializer_kwargs={'mean': 0, 'stddev': 0.01},
                     bias_init=1,
-                    flatten=True
+                    activation='relu'
                     )
-                fc6 = tf.nn.relu(fc6_in)
 
             fc6 = tf.nn.dropout(fc6, self.keep_prob)
             ops['fc6'] = fc6
 
         # FULLY CONNECTED 7
         with tf.variable_scope('fc7'):
-            fc7W, fc7b = var_wrap([4096, 4096], bias_init=1)
+            fc6_size = int(fc6.get_shape()[1])
+            fc7W, fc7b = var_wrap(np.array([fc6_size, 4096]), bias_init=1)
             fc7 = tf.nn.relu_layer(fc6, fc7W, fc7b)
             fc7 = tf.nn.dropout(fc7, self.keep_prob)
             ops['fc7'] = fc7
