@@ -89,11 +89,12 @@ def define_datasets(cfg, to_run=None):
     train_dataset.random_crop(cfg.crop_image_size)
     if not cfg.flip_constrain_fc6:
         train_dataset.random_flip()
-    train_dataset.rgb_distort(
-        rgb_eigenvectors=cfg.rgb_eigenvectors,
-        rgb_eigenvalues=cfg.rgb_eigenvalues,
-        stddev=cfg.rgb_stddev
-    )
+    if cfg.rgb_distort:
+        train_dataset.rgb_distort(
+            rgb_eigenvectors=cfg.rgb_eigenvectors,
+            rgb_eigenvalues=cfg.rgb_eigenvalues,
+            stddev=cfg.rgb_stddev
+        )
 
     # Create the training eval dataset with info from the cfg file.
     train_eval_dataset = dp.AlexNetDataset(
@@ -158,8 +159,8 @@ def main(cfg, cfg_file_name=None):
 
         # Copy last checkpoint to the restart checkpoint dir
         checkpoint_dir = u.maybe_create_dir(cur_run_dir, 'checkpoints')
-        restart_dir = u.maybe_create_dir(cur_run_dir, 'restart_checkpoints')
         latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+
         if cfg.checkpoint_start_step is None:
             latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
         else:
@@ -167,11 +168,16 @@ def main(cfg, cfg_file_name=None):
                 checkpoint_dir,
                 'model.ckpt-' + str(cfg.checkpoint_start_step)
             )
-
-        print latest_checkpoint
-        subprocess.call('cp ' + latest_checkpoint + ' ' + restart_dir, shell=True)
+            new_time_str = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            so.clip_summaries(cur_run_dir, cfg.checkpoint_start_step, new_time_str)
+            u.clip_checkpoints(cur_run_dir, cfg.checkpoint_start_step, new_time_str)
+            u.clip_cfgs(cur_run_dir, cfg.checkpoint_start_step, new_time_str)
 
     with tf.Graph().as_default() as graph:
+
+        # Random Seed
+        if cfg.random_seed is not None:
+            tf.set_random_seed(cfg.random_seed)
 
         # Define the dictionary which hold additional ops to be fed to sess.run
         to_run = {}
@@ -193,7 +199,8 @@ def main(cfg, cfg_file_name=None):
             keep_prob=keep_prob,
             data_format=cfg.data_format,
             flip_constrain_fc6=cfg.flip_constrain_fc6,
-            flip_weights_func=cfg.flip_weights_func
+            flip_weights_func=cfg.flip_weights_func,
+            max_shape=cfg.max_shape
 
         )
 
@@ -303,7 +310,7 @@ def main(cfg, cfg_file_name=None):
 
                     # Print info every interval.
                     if gs % cfg.print_interval == 0 and gs > 0:
-                        u.print_info(results, step, step_time, total_time, step)
+                        u.print_info(results, gs, step_time, total_time, step)
 
                     # Write a timeline every interval
                     if gs % cfg.timeline_interval == 0 and gs > 0:
@@ -314,9 +321,13 @@ def main(cfg, cfg_file_name=None):
                         u.write_checkpoint(saver, sess, cur_run_dir, global_step)
 
                     # Write summaries every interval.
-                    if gs % cfg.summary_interval == 0 and gs > 0:
+                    ##############
+                    # NOTE: May need to be taken out
+                    # if gs % cfg.summary_interval == 0 and gs > 0:
+                    if gs % cfg.summary_interval == 0:
+                        #############
                         # write the variable summaries.
-                        so.write_var_summaries(sess, train_writer, var_summaries, gs, total_step_time/step)
+                        so.write_var_summaries(sess, train_writer, var_summaries, gs, total_step_time/step, run_metadata)
 
                         # Set data_iter to pull from train_eval and write the
                         # summaries.

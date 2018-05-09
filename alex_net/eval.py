@@ -75,7 +75,9 @@ def define_datasets(cfg, to_run=None):
     )
 
     val_eval_dataset.five_crops(cfg.crop_image_size)
-    val_eval_dataset.horizontal_flip()
+
+    if not cfg.flip_constrain_fc6:
+        val_eval_dataset.horizontal_flip()
 
     # Create the iterator shared by all three dataset
     data_iter = val_eval_dataset.reinitializable_iterator(batched=False)
@@ -116,7 +118,9 @@ def main(cfg, cfg_file_name=None):
             images,
             num_classes=cfg.num_classes,
             keep_prob=keep_prob,
-            data_format=cfg.data_format
+            data_format=cfg.data_format,
+            flip_constrain_fc6=cfg.flip_constrain_fc6,
+            flip_weights_func=cfg.flip_weights_func
         )
 
         # Get the logits produced by the model
@@ -168,9 +172,16 @@ def main(cfg, cfg_file_name=None):
             # http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/
             if cfg.continue_training_run is not None:
                 checkpoint_dir = os.path.join(cur_run_dir, 'checkpoints')
+                if cfg.checkpoint_start_step is None:
+                    latest_checkpoint = tf.train.latest_checkpoint(checkpoint_dir)
+                else:
+                    latest_checkpoint = os.path.join(
+                        checkpoint_dir,
+                        'model.ckpt-' + str(cfg.checkpoint_start_step)
+                    )
                 saver.restore(
                     sess,
-                    tf.train.latest_checkpoint(checkpoint_dir)
+                    latest_checkpoint
                 )
             elif cfg.use_pretrained_weights:
                 to.load_weights(sess, cfg.pretrained_weights_file)

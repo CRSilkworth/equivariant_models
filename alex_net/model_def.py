@@ -1,5 +1,5 @@
 # Created on May 31 2018
-# Author: CRSilkworth, based on implementation by guerzhoy
+# Author: CRSilkworth, based on implementation by guerzhoy (http://www.cs.toronto.edu/~guerzhoy/tf_alexnet/)
 """Model definition of AlexNet."""
 import numpy as np
 import tensorflow as tf
@@ -89,7 +89,7 @@ def conv(input, kernel_height, kernel_width, channels_out, stride_height, stride
 class AlexNet(object):
     """Class which holds the network architecture, several helper functions and model parameters."""
 
-    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_fc6=False, flip_weights_func=None):
+    def __init__(self, images, keep_prob, num_classes, image_size=(224, 224), data_format='NHWC', flip_constrain_fc6=False, flip_weights_func=None, max_shape=False):
         """
         Create an AlexNet model. Recieves a tensor of images, feeds it through the network architecture and produces unscaled logits.
 
@@ -108,6 +108,7 @@ class AlexNet(object):
         self.data_format = data_format
         self.flip_constrain_fc6 = flip_constrain_fc6
         self.flip_weights_func = flip_weights_func
+        self.max_shape = max_shape
         if data_format == 'NCHW':
             self.images = tf.transpose(self.images, [0, 3, 1, 2])
 
@@ -134,6 +135,7 @@ class AlexNet(object):
             raise(ValueError), "Invalid data format"
 
         # CONVOLUTION 1
+        # Input [224, 224, 3]
         with tf.variable_scope('conv1'):
             conv1_in = conv(
                 input=self.images,
@@ -162,6 +164,7 @@ class AlexNet(object):
 
             ops['lrn1'] = lrn1
 
+            # Input [56, 56, 96]
             maxpool1 = tf.nn.max_pool(
                 lrn1,
                 ksize=pool_ksize,
@@ -172,6 +175,7 @@ class AlexNet(object):
             ops['maxpool1'] = maxpool1
 
         # CONVOLUTION 2
+        # Input [27, 27, 96]
         with tf.variable_scope('conv2'):
             conv2_in = conv(
                 input=maxpool1,
@@ -197,6 +201,7 @@ class AlexNet(object):
             )
             ops['lrn2'] = lrn2
 
+            # Input [27, 27, 256]
             maxpool2 = tf.nn.max_pool(
                 lrn2,
                 ksize=pool_ksize,
@@ -207,6 +212,7 @@ class AlexNet(object):
             ops['maxpool2'] = maxpool2
 
         # CONVOLUTION 3
+        # Input [13, 13, 256]
         with tf.variable_scope('conv3'):
             conv3_in = conv(
                 input=maxpool2,
@@ -224,6 +230,7 @@ class AlexNet(object):
             ops['conv3'] = conv3
 
         # CONVOLUTION 4
+        # Input [13, 13, 384]
         with tf.variable_scope('conv4'):
             conv4_in = conv(
                 input=conv3,
@@ -241,6 +248,7 @@ class AlexNet(object):
             ops['conv4'] = conv4
 
         # CONVOLUTION 5
+        # Input [13, 13, 384]
         with tf.variable_scope('conv5'):
             conv5_in = conv(
                 input=conv4,
@@ -257,6 +265,7 @@ class AlexNet(object):
             conv5 = tf.nn.relu(conv5_in)
             ops['conv5'] = conv5
 
+            # Input [13, 13, 256]
             maxpool5 = tf.nn.max_pool(
                 conv5,
                 ksize=pool_ksize,
@@ -271,6 +280,7 @@ class AlexNet(object):
             ops['maxpool5'] = maxpool5
 
         # FULLY CONNECTED 6
+        # Input [6, 6, 256]
         with tf.variable_scope('fc6'):
             if not self.flip_constrain_fc6:
                 shape_in = int(np.prod(maxpool5.get_shape()[1:]))
@@ -281,10 +291,12 @@ class AlexNet(object):
                 )
                 fc6 = tf.nn.relu_layer(flattened, fc6W, fc6b)
             else:
-                shape_in = maxpool5.get_shape()[1:]
-                shape_out = [shape_in[0], shape_in[1], 4096/(int(shape_in[0]) * int(shape_in[1]))]
-
-                fc6 = fe.flip_equivariant_layer(
+                if self.max_shape:
+                    height_width = [64, 64]
+                else:
+                    height_width = maxpool5.get_shape()[1:]
+                shape_out = [height_width[0], height_width[1], 4096/(int(height_width[0]) * int(height_width[1]))]
+                fc6 = fe.flip_layer(
                     input=maxpool5,
                     shape_out=shape_out,
                     flip_axis=1,

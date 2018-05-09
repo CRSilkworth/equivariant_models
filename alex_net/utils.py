@@ -6,7 +6,8 @@ import tensorflow as tf
 import os
 import pprint
 import subprocess
-
+import glob
+import datetime
 
 def dump_cfg_file(cfg_file_name, run_dir, step):
     """
@@ -125,3 +126,36 @@ def sizeof_fmt(num, suffix='B'):
             return "%3.1f%s%s" % (num, unit, suffix)
         num /= 1024.0
     return "%.1f%s%s" % (num, 'Yi', suffix)
+
+
+def clip_checkpoints(run_dir, clip_step, time_str):
+    checkpoint_dir = maybe_create_dir(run_dir, 'checkpoints')
+    bk_checkpoint_dir = maybe_create_dir(run_dir, 'bk_checkpoints', time_str)
+
+    checkpoint_files = glob.glob(os.path.join(checkpoint_dir, 'model.ckpt-*.index'))
+
+    for checkpoint_file in checkpoint_files:
+        checkpoint_str = checkpoint_file[:-6]
+        step_num = checkpoint_str.replace(checkpoint_dir, '').replace('model.ckpt-', '').replace('/', '')
+        step_num = int(step_num)
+
+        if not step_num > clip_step:
+            continue
+
+        subprocess.call('mv ' + checkpoint_str + '* ' + bk_checkpoint_dir, shell=True)
+
+
+def clip_cfgs(run_dir, clip_step, time_str):
+    cfg_dir = maybe_create_dir(run_dir)
+    bk_cfg_dir = maybe_create_dir(run_dir, 'bk_cfgs', time_str)
+
+    cfg_files = glob.glob(os.path.join(cfg_dir, 'train*cfg.py'))
+
+    for cfg_file in cfg_files:
+        step_num = cfg_file.split('_')[-2]
+        step_num = int(step_num)
+
+        if not step_num > clip_step:
+            continue
+
+        subprocess.call('mv ' + cfg_file + ' ' + bk_cfg_dir, shell=True)

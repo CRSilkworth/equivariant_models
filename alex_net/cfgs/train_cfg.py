@@ -13,36 +13,37 @@ run_dir = os.path.join(root_dir, 'alex_net/runs')
 train_tfrecord_filepaths = sorted(glob.glob('/home/crsilkworth/tf_records_images/train-*'))
 validation_tfrecord_filepaths = sorted(glob.glob('/home/crsilkworth/tf_records_images/validation-*'))
 pretrained_weights_file = os.path.join(root_dir, 'alex_net/weights/bvlc_alexnet.npy')
-checkpoint_dir = os.path.join(root_dir, 'alex_net/checkpoints')
-summary_dir = os.path.join(root_dir, 'alex_net/summaries')
-timeline_dir = os.path.join(root_dir, 'alex_net/timelines')
 
 # Model parameters
 model_type = md.AlexNet
 
-# Setup parameters
-continue_training_run = None
+# New model/continue training/pretrained model paramters
+continue_training_run = '2018-04-24-08-11-38'
 checkpoint_start_step = None
-flip_constrain_fc6 = True
-flip_weights_func = fc.flip_equivariant_weights
 use_pretrained_weights = False
+
+# Model definition parameters
+# flip_constrain_fc6 = False
+flip_constrain_fc6 = True
+flip_weights_func = fc.flip_invariant_weights
+# flip_weights_func = None
+max_shape = False
+
+# Input/output size parameters
 image_size = [256, 256]
 crop_image_size = [224, 224]
-keep_prob = 0.5
 num_classes = 1000
-num_dataset_threads = 20
 
 # Random seed
-seed = 1
-
+random_seed = 3456
 # Data input parameters
 data_format = 'NCHW'
 shuffle_buffer_size = 10000
+num_dataset_threads = 20
 
-# Data data_augmentation
+# RGB parameters
+rgb_distort = False
 rgb_stddev = 0.1
-
-# RGB summary attributes
 rgb_mean = np.array([123.68, 116.779, 103.939], dtype=np.float32)
 rgb_eigenvectors = np.array(
     [
@@ -60,7 +61,6 @@ bgr = True
 
 # Intervals
 print_interval = 1000
-keep_last_n_checkpoints = 25
 summary_interval = 10000
 checkpoint_interval = 10000
 timeline_interval = 10000
@@ -68,15 +68,17 @@ timeline_interval = 10000
 # Training parameters
 batch_size = 128
 num_epochs = None
-learning_rate = 0.001
+learning_rate = 0.000001
+# weight_decay = 0.0005
 weight_decay = 0.001
+keep_prob = 0.5
 momentum = 0.9
 
 # Eval paramters
 train_eval_max_iterations = 50000/128
 
 # Checkpoint stuff
-keep_last_n_checkpoints = 10
+keep_last_n_checkpoints = 100
 
 # Session configuration
 gpu_memory_frac = 0.8

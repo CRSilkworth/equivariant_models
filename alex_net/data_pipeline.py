@@ -84,6 +84,7 @@ class AlexNetDataset:
         self.add_horizontal_flip = True
 
     def _map_func(self, image, label):
+        
         mean = tf.reshape(self.rgb_mean, [1, 1, 3])
         image = tf.subtract(image, mean)
 

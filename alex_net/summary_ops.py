@@ -2,8 +2,13 @@
 # Author: CRSilkworth
 """Operations and functions used in the process of writing summaries for the training process."""
 import alex_net.train_ops as to
+import alex_net.utils as u
 import tensorflow as tf
 import numpy as np
+import datetime
+import subprocess
+import glob
+import os
 
 
 def eval_summaries(loss, logits, labels, to_run=None):
@@ -47,7 +52,7 @@ def variable_summaries():
     return var_summaries
 
 
-def write_var_summaries(sess, writer, var_summaries, step, time_per_step=None):
+def write_var_summaries(sess, writer, var_summaries, step, time_per_step=None, run_metadata=None):
     """
     Write the variable summaries as well as the training step time
 
@@ -58,12 +63,15 @@ def write_var_summaries(sess, writer, var_summaries, step, time_per_step=None):
         step: an int. the training step number.
         time_per_step: a float (seconds) The length of time a training step takes.
     """
-
     # If a time_per_step is given then create a summary and add it.
     if time_per_step is not None:
         summary = tf.Summary()
         summary.value.add(tag='time_per_step', simple_value=np.mean(time_per_step))
         writer.add_summary(summary, step)
+
+    # Add metadata
+    if run_metadata is not None:
+        writer.add_run_metadata(run_metadata, 'step%d' % step)
 
     # Add the summary to the writer and flush.
     writer.add_summary(sess.run(var_summaries), step)
@@ -105,3 +113,23 @@ def write_summaries(sess, writer, summaries_dict, step):
     # Add the summary to the writer and flush.
     writer.add_summary(summary, step)
     writer.flush()
+
+
+def clip_summaries(run_dir, clip_step, time_str):
+    summary_dir = u.maybe_create_dir(run_dir, 'summaries')
+    bk_summary_dir = u.maybe_create_dir(run_dir, 'bk_summaries', time_str)
+
+    subprocess.call('mv ' + summary_dir + '/* ' + bk_summary_dir, shell=True)
+
+    for dir in ['train', 'val']:
+        writer = tf.summary.FileWriter(os.path.join(summary_dir, dir))
+
+        summary_files = sorted(glob.glob(os.path.join(bk_summary_dir, dir, '*')))
+        for summary_file in summary_files:
+            for e in tf.train.summary_iterator(summary_file):
+                if e.step > clip_step:
+                    continue
+
+                writer.add_event(e)
+        writer.flush()
+        writer.close()

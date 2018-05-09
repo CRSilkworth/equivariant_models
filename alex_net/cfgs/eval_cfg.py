@@ -5,6 +5,7 @@ import alex_net.pjaehrling as pj
 import alex_net.kratzert as kr
 import alex_net.guerzhoy as gu
 import alex_net.model_def as md
+import constrained_weights.flip_constrained as fc
 
 # File paths
 root_dir = '/home/crsilkworth/equivariant_models'
@@ -20,16 +21,18 @@ timeline_dir = os.path.join(root_dir, 'alex_net/timelines')
 model_type = md.AlexNet
 
 # Setup parameters
-continue_training_run = '2018-04-01-19-48-36'
+continue_training_run = '2018-04-24-08-11-38'
+checkpoint_start_step = 550000
+flip_constrain_fc6 = True
+flip_weights_func = fc.flip_invariant_weights
+# flip_weights_func = None
+max_shape = False
 use_pretrained_weights = False
 image_size = [256, 256]
 crop_image_size = [224, 224]
 keep_prob = 0.5
 num_classes = 1000
 num_dataset_threads = 20
-
-# Random seed
-seed = 1
 
 # Data input parameters
 data_format = 'NCHW'
@@ -56,17 +59,12 @@ bgr = True
 
 # Intervals
 print_interval = 1000
-keep_last_n_checkpoints = 10
-summary_interval = 10000
-checkpoint_interval = 10000
 timeline_interval = 10000
 
 # Training parameters
 batch_size = 128
-num_epochs = None
-learning_rate = 0.00001
 weight_decay = 0.0005
-momentum = 0.9
+
 
 # Eval paramters
 train_eval_max_iterations = 50000/128
