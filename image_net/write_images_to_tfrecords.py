@@ -414,23 +414,25 @@ def main(cfg):
         'cfg.validation_shards')
 
     # Run it!
-    _process_dataset(
-        'validation',
-        cfg.validation_directory,
-        cfg.validation_shards,
-        cfg.label_defs_file_name,
-        cfg.val_labels_file_name,
-        resize=cfg.resize,
-        image_size=cfg.image_size
-    )
-    _process_dataset(
-        'train',
-        cfg.train_directory,
-        cfg.train_shards,
-        cfg.label_defs_file_name,
-        resize=cfg.resize,
-        image_size=cfg.image_size
-    )
+    if cfg.validation_directory is not None:
+        _process_dataset(
+            'validation',
+            cfg.validation_directory,
+            cfg.validation_shards,
+            cfg.label_defs_file_name,
+            cfg.val_labels_file_name,
+            resize=cfg.resize,
+            image_size=cfg.image_size
+        )
+    if cfg.train_directory is not None:
+        _process_dataset(
+            'train',
+            cfg.train_directory,
+            cfg.train_shards,
+            cfg.label_defs_file_name,
+            resize=cfg.resize,
+            image_size=cfg.image_size
+        )
 
 
 if __name__ == '__main__':
