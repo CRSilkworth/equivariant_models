@@ -95,6 +95,7 @@ target/
 *.npy
 *.rtf
 **/runs/**
+**/keep_runs/**
 #Summary files
 *summary_logs/*
 
