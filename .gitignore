@@ -139,3 +139,4 @@ stanford-postagger-full-2015-01-30/
 
 !/cac/features/unitTest/*.txt
 !/cac/nat_language_helpers/stopwords.txt
+!invariance_equivariance_weight_sharing.pdf
