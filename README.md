@@ -1,4 +1,4 @@
-![paper_image](https://github.com/CRSilkworth/equivariant_models/blob/master/paper_images.png)
+![paper_image](https://github.com/CRSilkworth/equivariant_models/blob/master/paper_image.png)
 # Equivariant models
 This repository holds the code used in the evaluation section of [this paper](https://github.com/CRSilkworth/equivariant_models/blob/master/invariance_equivariance_weight_sharing.pdf). The [image_net](https://github.com/CRSilkworth/equivariant_models/tree/master/image_net) directory holds all the code use in the preprocessing and conversion of the images into tfrecords, while the [alex_net](https://github.com/CRSilkworth/equivariant_models/tree/master/alex_net) holds the various model definitions of the original alex net and the flip invariant version. It also holds the training script that was used to get the evaluation results in the paper. The [constrained_weights](https://github.com/CRSilkworth/equivariant_models/tree/master/constrained_weights) holds the code that actually enacts a flip invariant layer. 
 
