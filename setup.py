@@ -40,7 +40,7 @@ setup(
     packages=find_packages(exclude=['unit_test', 'unitTest', '*.unitTest',
                                     'unitTest.*', '*.unitTest.*', 'projects', 'projects.*']),
     install_requires=[
-        'numpy==1.13.0',
+        'numpy==1.22.0',
         'tensorflow-gpu>=1.5.0',
         'scipy>= 0.19.0',
         'scikit-learn>=0.19.1',
